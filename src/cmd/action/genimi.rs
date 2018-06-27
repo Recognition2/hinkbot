@@ -8,6 +8,7 @@ use telegram_bot::{
     types::{Message, ParseMode},
 };
 
+use app::{NAME, VERSION};
 use super::Action;
 
 const CMD: &'static str = "genimi";
@@ -27,11 +28,15 @@ impl Action for Genimi {
 
     fn invoke(&self, msg: &Message, api: &Api) -> Box<Future<Item = (), Error = ()>> {
         api.spawn(
-            msg.text_reply("\
-                `genimi bot v0.0.1`\n\
-                Developed by @timvisee\n\
-                https://timvisee.com/\
-            ").parse_mode(ParseMode::Markdown),
+            msg.text_reply(format!(
+                "\
+                    `{} v{}`\n\
+                    Developed by @timvisee\n\
+                    https://timvisee.com/\
+                ",
+                NAME,
+                VERSION,
+            )).parse_mode(ParseMode::Markdown),
         );
         Box::new(ok(()))
     }

@@ -12,6 +12,7 @@ use telegram_bot::{
 use cmd::handler::Handler as CmdHandler;
 
 lazy_static! {
+    /// A regex for matching messages that contain a command.
     static ref CMD_REGEX: Regex = Regex::new(r"^/([a-zA-Z0-9_]+)(@.*$|$)")
         .expect("failed to compile CMD_REGEX");
 }
@@ -33,8 +34,7 @@ impl Handler {
             } => {
                 // Route the message to the command handler, if it's a command
                 if let Some(cmd) = matches_cmd(data) {
-                    // TODO: do not re-box
-                    return Box::new(CmdHandler::handle(cmd, msg.clone(), api));
+                    return CmdHandler::handle(cmd, msg.clone(), api);
                 }
 
                 // Route private messages
@@ -49,7 +49,6 @@ impl Handler {
             _ => {},
         }
 
-        // TODO: Use Ok ?
         Box::new(ok(()))
     }
 

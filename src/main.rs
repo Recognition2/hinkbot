@@ -5,6 +5,7 @@ extern crate regex;
 extern crate telegram_bot;
 extern crate tokio_core;
 
+mod app;
 mod cmd;
 mod msg;
 
