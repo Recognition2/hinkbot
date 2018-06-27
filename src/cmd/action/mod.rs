@@ -1,4 +1,5 @@
 pub mod genimi;
+pub mod help;
 pub mod ping;
 pub mod test;
 
