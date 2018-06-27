@@ -1,52 +1,58 @@
 extern crate futures;
+#[macro_use]
+extern crate lazy_static;
 extern crate regex;
 extern crate telegram_bot;
 extern crate tokio_core;
 
+mod cmd;
+mod msg;
+
 use std::env;
 
-use futures::Stream;
-use regex::Regex;
+use futures::{Future, Stream};
+use futures::future::ok;
 use tokio_core::reactor::Core;
 use telegram_bot::*;
+
+use msg::handler::Handler;
 
 fn main() {
     let mut core = Core::new().unwrap();
 
-    let token = env::var("TELEGRAM_BOT_TOKEN").unwrap();
+    let token = env::var("TELEGRAM_BOT_TOKEN").expect("env var TELEGRAM_BOT_TOKEN not set");
     let api = Api::configure(token).build(core.handle()).unwrap();
 
-    // Fetch new updates via long poll method
-    let future = api.stream().for_each(|update| {
-
-        // If the received update contains a new message...
-        if let UpdateKind::Message(message) = update.kind {
-
-            if let MessageKind::Text {ref data, ..} = message.kind {
-                // Print received text message to stdout.
-                println!("DM <{}>: {}", &message.from.first_name, data);
-
-                let msg = data.trim();
-                if msg.starts_with('/') {
-                    let re = Regex::new(r"^/ping(@.*$|$)").expect("failed to build ping regex");
-                    if re.is_match(msg) {
-                        api.spawn(message.text_reply("Pong!"));
-                    }
-
-                    let re = Regex::new(r"^/genimi(@.*$|$)").expect("failed to build genimi regex");
-                    if re.is_match(msg) {
-                        api.spawn(message.text_reply("Genimi bot v0.0.1\nDeveloped by Tim Visee, https://timvisee.com/"));
-                    }
-                } else {
-                    api.spawn(message.text_reply(
-                        format!("Hi, {}!\nDirect messages are not supported yet.", &message.from.first_name)
-                    ));
+    // Build a future for handling all updates from Telegram
+    let future = api.stream()
+        // Log text messages
+        .inspect(|update| {
+            if let UpdateKind::Message(message) = &update.kind {
+                if let MessageKind::Text {ref data, ..} = message.kind {
+                    println!(
+                        "MSG <{}>@{}: {}",
+                        &message.from.first_name,
+                        &message.chat.id(),
+                        data,
+                    );
                 }
             }
-        }
+        })
 
-        Ok(())
-    });
+        // TODO: do not mask Telegram errors here
+        .map_err(|e| {
+            eprintln!("ERROR: {:?}", e)
+        })
 
+        // Route new messages through the message handler, drop other updates
+        .for_each(|update| -> Box<Future<Item = (), Error = ()>> {
+            if let UpdateKind::Message(message) = update.kind {
+                Handler::handle(message, &api)
+            } else {
+                Box::new(ok(()))
+            }
+        });
+
+    // Run the bot handling future in the reactor
     core.run(future).unwrap();
 }
