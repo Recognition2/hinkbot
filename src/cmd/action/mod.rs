@@ -1,3 +1,4 @@
+pub mod exec;
 pub mod genimi;
 pub mod help;
 pub mod ping;

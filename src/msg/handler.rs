@@ -13,7 +13,7 @@ use cmd::handler::Handler as CmdHandler;
 
 lazy_static! {
     /// A regex for matching messages that contain a command.
-    static ref CMD_REGEX: Regex = Regex::new(r"^/([a-zA-Z0-9_]+)(@.*$|$)")
+    static ref CMD_REGEX: Regex = Regex::new(r"^/([a-zA-Z0-9_]+)(.*$|$)")
         .expect("failed to compile CMD_REGEX");
 }
 

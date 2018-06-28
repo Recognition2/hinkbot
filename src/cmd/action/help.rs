@@ -30,6 +30,7 @@ impl Action for Help {
             // TODO: load the available actions dynamically
             msg.text_reply("\
                 Genimi commands:\n\
+                /exec - Execute a shell command\n\
                 /genimi - Genimi command\n\
                 /ping - Ping Genimi\n\
                 /test - Test command\n\

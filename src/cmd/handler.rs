@@ -8,6 +8,7 @@ use telegram_bot::{
 };
 
 use super::action::Action;
+use super::action::exec::Exec;
 use super::action::genimi::Genimi;
 use super::action::help::Help;
 use super::action::ping::Ping;
@@ -15,6 +16,7 @@ use super::action::test::Test;
 
 lazy_static! {
     static ref ACTIONS: Vec<Box<dyn Action + Sync>> = vec![
+        Box::new(Exec::new()),
         Box::new(Genimi::new()),
         Box::new(Help::new()),
         Box::new(Ping::new()),
