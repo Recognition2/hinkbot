@@ -11,7 +11,11 @@ use telegram_bot::{
 use app::{NAME, VERSION};
 use super::Action;
 
+/// The action command name.
 const CMD: &'static str = "genimi";
+
+/// The action help.
+const HELP: &'static str = "Genimi info";
 
 pub struct Genimi;
 
@@ -24,6 +28,10 @@ impl Genimi {
 impl Action for Genimi {
     fn cmd(&self) -> &'static str {
         CMD
+    }
+
+    fn help(&self) -> &'static str {
+        HELP
     }
 
     fn invoke(&self, msg: &Message, api: &Api) -> Box<Future<Item = (), Error = ()>> {

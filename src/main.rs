@@ -9,8 +9,7 @@ mod app;
 mod cmd;
 mod msg;
 
-use std::env;
-
+use std::env; 
 use futures::Stream;
 use futures::future::ok;
 use tokio_core::reactor::Core;
@@ -42,11 +41,6 @@ fn main() {
                     );
                 }
             }
-        })
-
-        // TODO: do not mask Telegram errors here
-        .map_err(|e| {
-            eprintln!("ERROR: {:?}", e)
         })
 
         // Route new messages through the message handler, drop other updates

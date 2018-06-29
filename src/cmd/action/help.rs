@@ -9,8 +9,13 @@ use telegram_bot::{
 };
 
 use super::Action;
+use super::super::handler::ACTIONS;
 
+/// The action command name.
 const CMD: &'static str = "help";
+
+/// The action help.
+const HELP: &'static str = "Show help";
 
 pub struct Help;
 
@@ -25,17 +30,27 @@ impl Action for Help {
         CMD
     }
 
+    fn help(&self) -> &'static str {
+        HELP
+    }
+
     fn invoke(&self, msg: &Message, api: &Api) -> Box<Future<Item = (), Error = ()>> {
+        // Build the command list
+        let cmd_list = ACTIONS.iter()
+            .map(|action| format!(
+                "/{} - {}",
+                action.cmd(),
+                action.help(),
+            ))
+            .collect::<Vec<String>>()
+            .join("\n");
+
+        // Send the help message
         api.spawn(
-            // TODO: load the available actions dynamically
-            msg.text_reply("\
-                Genimi commands:\n\
-                /exec - Execute a shell command\n\
-                /genimi - Genimi command\n\
-                /ping - Ping Genimi\n\
-                /test - Test command\n\
-                /help - Command help\
-            "),
+            msg.text_reply(format!(
+                "Genimi commands:\n{}",
+                cmd_list,
+            )),
         );
         Box::new(ok(()))
     }

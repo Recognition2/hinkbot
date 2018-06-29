@@ -24,6 +24,9 @@ pub trait Action {
         cmd.trim().eq_ignore_ascii_case(self.cmd())
     }
 
+    /// Short help information for this action.
+    fn help(&self) -> &'static str;
+
     /// Invoke the action with the given context.
     fn invoke(&self, msg: &Message, api: &Api) -> Box<Future<Item = (), Error = ()>>;
 }

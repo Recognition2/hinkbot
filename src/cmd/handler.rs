@@ -15,7 +15,8 @@ use super::action::ping::Ping;
 use super::action::test::Test;
 
 lazy_static! {
-    static ref ACTIONS: Vec<Box<dyn Action + Sync>> = vec![
+    /// A list of all available and invokable actions.
+    pub static ref ACTIONS: Vec<Box<dyn Action + Sync>> = vec![
         Box::new(Exec::new()),
         Box::new(Genimi::new()),
         Box::new(Help::new()),
@@ -33,9 +34,9 @@ impl Handler {
         -> Box<Future<Item = (), Error = ()>>
     {
         // Invoke the proper action
-        if let Some(action) = ACTIONS.iter()
-            .find(|a| a.is_cmd(cmd))
-        {
+        let action = ACTIONS.iter()
+            .find(|a| a.is_cmd(cmd));
+        if let Some(action) = action {
             action.invoke(&msg, api)
         } else {
             Box::new(ok(()))

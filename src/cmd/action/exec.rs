@@ -25,7 +25,11 @@ use self::tokio_timer::Interval;
 
 use super::Action;
 
+/// The action command name.
 const CMD: &'static str = "exec";
+
+/// The action help.
+const HELP: &'static str = "Invoke a shell command";
 
 pub struct Exec;
 
@@ -38,6 +42,10 @@ impl Exec {
 impl Action for Exec {
     fn cmd(&self) -> &'static str {
         CMD
+    }
+
+    fn help(&self) -> &'static str {
+        HELP
     }
 
     // TODO: proper error handling everywhere, pass errors along
