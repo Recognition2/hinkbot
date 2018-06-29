@@ -19,9 +19,13 @@ use telegram_bot::*;
 use msg::handler::Handler;
 
 fn main() {
+    // Build a future reactor
     let mut core = Core::new().unwrap();
+    let core_handle = core.handle();
 
-    let token = env::var("TELEGRAM_BOT_TOKEN").expect("env var TELEGRAM_BOT_TOKEN not set");
+    // Retrieve the Telegram bot token, initiate the API client
+    let token = env::var("TELEGRAM_BOT_TOKEN")
+        .expect("env var TELEGRAM_BOT_TOKEN not set");
     let api = Api::configure(token).build(core.handle()).unwrap();
 
     // Build a future for handling all updates from Telegram
@@ -46,12 +50,13 @@ fn main() {
         })
 
         // Route new messages through the message handler, drop other updates
-        .for_each(|update| -> Box<Future<Item = (), Error = ()>> {
+        .for_each(|update| {
             if let UpdateKind::Message(message) = update.kind {
-                Handler::handle(message, &api)
-            } else {
-                Box::new(ok(()))
+                // Build a future to process the message, spawn it on the reactor
+                core_handle.spawn(Handler::handle(message, &api));
             }
+
+            ok(())
         });
 
     // Run the bot handling future in the reactor
