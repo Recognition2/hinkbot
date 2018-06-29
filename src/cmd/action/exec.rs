@@ -1,10 +1,7 @@
 extern crate htmlescape;
-extern crate tokio_io;
-extern crate tokio_process;
 extern crate tokio_timer;
 
-use std::io::BufReader;
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::ExitStatus;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -19,23 +16,73 @@ use telegram_bot::{
     types::{Message, MessageKind, ParseMode},
 };
 use self::htmlescape::encode_minimal;
-use self::tokio_io::io::lines;
-use self::tokio_process::CommandExt;
 use self::tokio_timer::Interval;
 
+use executor::isolated;
 use super::Action;
 
 /// The action command name.
 const CMD: &'static str = "exec";
 
 /// The action help.
-const HELP: &'static str = "Invoke a shell command";
+const HELP: &'static str = "Execute a shell command";
 
 pub struct Exec;
 
 impl Exec {
     pub fn new() -> Self {
         Exec
+    }
+
+    /// Execute the given command in isolated environment.
+    ///
+    /// Send a reply to the given user command `msg`
+    /// and timely update it to show the status of the command that was executed.
+    pub fn exec_cmd<'a>(cmd: String, api: Api, msg: &Message) -> Box<Future<Item = (), Error = ()>> {
+        // Create the status message, and build the executable status object
+        let exec_status = ExecStatus::create_status_msg(msg, api.clone());
+
+        // Build a future for the command execution, and status updating
+        let exec = exec_status.and_then(move |status| {
+            // Create an mutexed arc for the status
+            let status = Arc::new(Mutex::new(status));
+
+            // Execute the command in an isolated environment, process output and the exit code
+            let status_output = status.clone();
+            let status_exit = status.clone();
+            let cmd = isolated::execute(cmd, move |line| {
+                    // Append the line to the captured output
+                    status_output.lock().unwrap().append_line(&line);
+                    Ok(())
+                })
+                .and_then(move |status| {
+                    // Set the exit status
+                    status_exit.lock().unwrap().set_status(status);
+                    ok(())
+                });
+
+            // Set up an interval for constantly updating the status
+            let status_update = status.clone();
+            Interval::new(
+                    Instant::now() + Duration::from_millis(1000),
+                    Duration::from_millis(1000),
+                )
+                .for_each(move |_| {
+                    // Update the status on Telegram, throttled
+                    status_update.lock().unwrap().update_throttled();
+                    Ok(())
+                })
+                .map_err(|_| ())
+                .select(cmd)
+                .and_then(move |_| {
+                    // Update one final time, to ensure all status is sent to Telegram
+                    status.lock().unwrap().update();
+                    ok(())
+                })
+                .map_err(|_| ())
+        });
+
+        Box::new(exec)
     }
 }
 
@@ -60,7 +107,7 @@ impl Action for Exec {
 
             // The command to run in the shell
             // TODO: actually properly fetch the command to execute from the full message
-            let command = data.splitn(2, ' ')
+            let cmd = data.splitn(2, ' ')
                 .skip(1)
                 .next()
                 .map(|cmd| cmd.trim_left())
@@ -68,7 +115,7 @@ impl Action for Exec {
                 .to_owned();
 
             // Provide the user with feedback if no command is entered
-            if command.trim().is_empty() {
+            if cmd.trim().is_empty() {
                 api.spawn(
                     msg.text_reply("\
                         Please provide a command to run.\n\
@@ -81,95 +128,10 @@ impl Action for Exec {
             }
 
             // Print the command to run
-            println!("CMD: {}", command);
+            println!("CMD: {}", cmd);
 
-            // Create the status message, and build the executable status object
-            let exec_status = ExecStatus::create_status_msg(msg, api.clone());
-            let exec_status = exec_status.and_then(move |exec_status| {
-                // Create an mutexed arc for the exec status
-                let exec_status = Arc::new(Mutex::new(exec_status));
-
-                // Spawn an isolated container to run the user command in
-                // TODO: configurable timeout
-                // TODO: also handle a timeout fallback outside the actual container
-                // TODO: map container UIDs to something above 10k
-                let mut process = Command::new("docker")
-                    .arg("run")
-                    .arg("--rm")
-                    .args(&["--cpus", "0.2"])
-                    // TODO: enable these memory limits once the warning is fixed
-                    // .args(&["--memory", "100m"])
-                    // .args(&["--kernel-memory", "25m"])
-                    // .args(&["--memory-swappiness", "0"])
-                    // .args(&["--device-read-bps", "/:50mb"])
-                    // .args(&["--device-write-bps", "/:50mb"])
-                    .args(&["--workdir", "/root"])
-                    .args(&["--restart", "no"])
-                    .args(&["--stop-timeout", "1"])
-                    .arg("genimi-exec")
-                    .args(&["timeout", "--signal=SIGTERM", "--kill-after=65", "60"])
-                    .args(&["bash", "-c", &command])
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn_async()
-                    .unwrap();
-
-                // Build an stdout and stderr reader to process output
-                let stdout_reader = BufReader::new(process.stdout().take().unwrap());
-                let stderr_reader = BufReader::new(process.stderr().take().unwrap());
-                let exec_status_stdout = exec_status.clone();
-                let exec_status_stderr = exec_status.clone();
-                let stdout_stream = lines(stdout_reader)
-                    .for_each(move |line| {
-                        // Append the line to the output
-                        exec_status_stdout.lock().unwrap().append_line(&line);
-                        Ok(())
-                    })
-                    .map_err(|_| ());
-                let stderr_stream = lines(stderr_reader)
-                    .for_each(move |line| {
-                        // Append the line to the output
-                        exec_status_stderr.lock().unwrap().append_line(&line);
-                        Ok(())
-                    })
-                    .map_err(|_| ());
-
-                // Create a future for when the process exists and the status code is known
-                let exec_status_complete = exec_status.clone();
-                let process_exit = process.wait_with_output()
-                    .and_then(move |output| {
-                        // Update the status
-                        exec_status_complete.lock().unwrap().set_status(output.status);
-                        ok(())
-                    })
-                    .map_err(|_| ());
-
-                // Create a future for when running the process fully completes
-                let process_complete = stdout_stream
-                    .join(stderr_stream)
-                    .join(process_exit)
-                    .map(|_| ());
-
-                // Set up an interval for constantly updating the status
-                let exec_status_interval = exec_status.clone();
-                Interval::new(
-                        Instant::now() + Duration::from_millis(1000),
-                        Duration::from_millis(1000),
-                    )
-                    .for_each(move |_| {
-                        exec_status_interval.lock().unwrap().update_throttled();
-                        Ok(())
-                    })
-                    .map_err(|_| ())
-                    .select(process_complete)
-                    .and_then(move |_| {
-                        exec_status.lock().unwrap().update();
-                        ok(())
-                    })
-                    .map_err(|_| ())
-            });
-
-            return Box::new(exec_status);
+            // Execute the command, report back to the user
+            return Self::exec_cmd(cmd, api, msg);
         }
 
         Box::new(ok(()))
@@ -181,7 +143,7 @@ impl Action for Exec {
 /// changes, along with an Telegram API instance.
 // TODO: detect timeouts
 // TODO: report execution times
-struct ExecStatus {
+pub struct ExecStatus {
     /// The actual output.
     output: String,
 

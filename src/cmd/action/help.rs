@@ -5,7 +5,7 @@ use futures::{
 use telegram_bot::{
     Api,
     prelude::*,
-    types::Message,
+    types::{Message, ParseMode},
 };
 
 use super::Action;
@@ -36,22 +36,25 @@ impl Action for Help {
 
     fn invoke(&self, msg: &Message, api: &Api) -> Box<Future<Item = (), Error = ()>> {
         // Build the command list
-        let cmd_list = ACTIONS.iter()
+        let mut cmds: Vec<String> = ACTIONS.iter()
             .map(|action| format!(
-                "/{} - {}",
+                "/{}: _{}_",
                 action.cmd(),
                 action.help(),
             ))
-            .collect::<Vec<String>>()
-            .join("\n");
+            .collect();
+        cmds.sort();
+        let cmd_list = cmds.join("\n");
 
         // Send the help message
         api.spawn(
             msg.text_reply(format!(
-                "Genimi commands:\n{}",
+                "*Genimi commands:*\n{}",
                 cmd_list,
-            )),
+            ))
+            .parse_mode(ParseMode::Markdown),
         );
+
         Box::new(ok(()))
     }
 }

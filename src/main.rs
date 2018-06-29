@@ -7,6 +7,7 @@ extern crate tokio_core;
 
 mod app;
 mod cmd;
+mod executor;
 mod msg;
 
 use std::env; 
