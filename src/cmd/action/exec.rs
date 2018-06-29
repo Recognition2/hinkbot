@@ -98,7 +98,7 @@ impl Action for Exec {
                     .args(&["--workdir", "/root"])
                     .args(&["--restart", "no"])
                     .args(&["--stop-timeout", "1"])
-                    .arg("ubuntu")
+                    .arg("genimi-exec")
                     .args(&["timeout", "--signal=SIGTERM", "--kill-after=65", "60"])
                     .args(&["bash", "-c", &command])
                     .stdout(Stdio::piped())
