@@ -145,8 +145,8 @@ impl Action for Exec {
                 // Set up an interval for constantly updating the status
                 let exec_status_interval = exec_status.clone();
                 Interval::new(
-                        Instant::now() + Duration::from_millis(500),
-                        Duration::from_millis(500),
+                        Instant::now() + Duration::from_millis(1000),
+                        Duration::from_millis(1000),
                     )
                     .for_each(move |_| {
                         exec_status_interval.lock().unwrap().update_throttled();
@@ -376,7 +376,7 @@ impl ExecStatus {
         // Throttle
         // TODO: make the throttle time configurable
         match self.changed_at.elapsed() {
-            Ok(elapsed) if elapsed < Duration::from_millis(495) => return,
+            Ok(elapsed) if elapsed < Duration::from_millis(900) => return,
             Err(..) => return,
             _ => {},
         }

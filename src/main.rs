@@ -11,7 +11,7 @@ mod msg;
 
 use std::env;
 
-use futures::{Future, Stream};
+use futures::Stream;
 use futures::future::ok;
 use tokio_core::reactor::Core;
 use telegram_bot::*;
