@@ -1,7 +1,8 @@
 pub mod exec;
-pub mod risc;
 pub mod help;
+pub mod id;
 pub mod ping;
+pub mod risc;
 pub mod test;
 
 use futures::Future;
