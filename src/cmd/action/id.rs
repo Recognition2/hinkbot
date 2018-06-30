@@ -46,7 +46,7 @@ impl Id {
         // Build the header, add the ID
         let mut info = format!("\
                 *{}:*\n\
-                ID: _{}_\
+                ID: `{}`\
             ",
             caption,
             user.id,
@@ -55,7 +55,7 @@ impl Id {
         // Apend the username if known
         if let Some(ref username) = user.username {
             info += &format!(
-                "\nUsername: _{}_",
+                "\nUsername: `{}`",
                 username,
             );
         }
@@ -85,9 +85,9 @@ impl Id {
         // Build the main info
         let mut info = format!("\
                 *{}:*\n\
-                ID: _{}_\n\
-                Poster ID: _{}_\n\
-                Chat ID: _{}_\n\
+                ID: `{}`\n\
+                Poster ID: `{}`\n\
+                Chat ID: `{}`\n\
                 {}\n\
                 Date: _{}_\
             ",
@@ -127,15 +127,15 @@ impl Id {
                 ForwardFrom::User {
                         user,
                     } => format!(
-                        "\nOriginal user ID: _{}_",
+                        "\nOriginal user ID: `{}`",
                         user.id,
                     ),
                 ForwardFrom::Channel {
                         channel,
                         message_id,
                     } => format!("\n\
-                            Original message ID: _{}_\n\
-                            Original channel ID: _{}_\
+                            Original message ID: `{}`\n\
+                            Original channel ID: `{}`\
                         ",
                         message_id,
                         channel.id,
@@ -151,8 +151,8 @@ impl Id {
         // Build the main info
         let mut info = format!("\
                 *{}:*\n\
-                ID: _{}_\n\
-                Channel ID: _{}_\n\
+                ID: `{}`\n\
+                Channel ID: `{}`\n\
                 Channel title: _{}_\n\
                 {}\n\
                 Date: _{}_\
@@ -193,15 +193,15 @@ impl Id {
                 ForwardFrom::User {
                         user,
                     } => format!(
-                        "\nOriginal user ID: _{}_",
+                        "\nOriginal user ID: `{}`",
                         user.id,
                     ),
                 ForwardFrom::Channel {
                         channel,
                         message_id,
                     } => format!("\n\
-                            Original message ID: _{}_\n\
-                            Original channel ID: _{}_\
+                            Original message ID: `{}`\n\
+                            Original channel ID: `{}`\
                         ",
                         message_id,
                         channel.id,
@@ -233,29 +233,29 @@ impl Id {
         // Add details
         info += &match chat {
             MessageChat::Private(user) => format!("\n\
-                    Type: _private_\n\
-                    With user ID: _{}_\
+                    Type: `private`\n\
+                    Other user ID: `{}`\
                 ",
                 user.id,
             ),
             MessageChat::Group(group) => format!("\n\
-                    Type: _group_\n\
-                    Group ID: _{}_\n\
+                    Type: `group`\n\
+                    Group ID: `{}`\n\
                     Title: _{}_\
                 ",
                 group.id,
                 group.title,
             ),
             MessageChat::Supergroup(group) => format!("\n\
-                    Type: _supergroup_\n\
-                    Group ID: _{}_\n\
+                    Type: `supergroup`\n\
+                    Group ID: `{}`\n\
                     Title: _{}_\
                 ",
                 group.id,
                 group.title,
             ),
             MessageChat::Unknown(_) =>
-                "Type: _?_".into(),
+                "Type: `?`".into(),
         };
 
         info
@@ -280,14 +280,14 @@ impl Id {
     pub fn build_message_kind_details(kind: &MessageKind) -> String {
         match kind {
             MessageKind::Text { .. } => 
-                String::from("Kind: _text_"),
+                String::from("Kind: `text`"),
             MessageKind::Audio {
                 data,
             } => {
                 // Build generic info
                 let mut info = format!("\
-                        Kind: _audio_\n\
-                        Audio file ID: _{}_\n\
+                        Kind: `audio`\n\
+                        Audio file ID: `{}`\n\
                         Audio length: _{}_\
                     ",
                     data.file_id,
@@ -313,7 +313,7 @@ impl Id {
                 // Append the mime type
                 if let Some(ref mime) = data.mime_type {
                     info += &format!(
-                        "\nAudio mime: _{}_",
+                        "\nAudio mime: `{}`",
                         mime,
                     );
                 }
@@ -334,8 +334,8 @@ impl Id {
             } => {
                 // Build generic info
                 let mut info = format!("\
-                        Kind: _document_\n\
-                        Document file ID: _{}_\
+                        Kind: `document`\n\
+                        Document file ID: `{}`\
                     ",
                     data.file_id,
                 );
@@ -343,7 +343,7 @@ impl Id {
                 // Append the thumbnail information
                 if let Some(ref thumb) = data.thumb {
                     info += &format!("\n\
-                            Document thumb file ID: _{}_\n\
+                            Document thumb file ID: `{}`\n\
                             Document pixels: _{}x{}_\
                         ",
                         thumb.file_id,
@@ -400,8 +400,8 @@ impl Id {
             } => {
                 // Build generic info
                 let mut info = format!("\
-                        Kind: _photo_\n\
-                        Photos: _{}_\
+                        Kind: `photo`\n\
+                        Photos: `{}`\
                     ",
                     data.len(),
                 );
@@ -409,7 +409,7 @@ impl Id {
                 // Loop through the photos
                 for (i, photo) in data.iter().enumerate() {
                     info += &format!("\n\
-                            Photo #{} file ID: _{}_\n\
+                            Photo #{} file ID: `{}`\n\
                             Photo #{} pixels: _{}x{}_\
                         ",
                         i,
@@ -444,8 +444,8 @@ impl Id {
             } => {
                 // Build generic info
                 let mut info = format!("\
-                        Kind: _sticker_\n\
-                        Sticker file ID: _{}_\n\
+                        Kind: `sticker`\n\
+                        Sticker file ID: `{}`\n\
                         Sticker pixels: _{}x{}_\
                     ",
                     data.file_id,
@@ -456,7 +456,7 @@ impl Id {
                 // Append the thumbnail information
                 if let Some(ref thumb) = data.thumb {
                     info += &format!("\n\
-                            Sticker thumb file ID: _{}_\n\
+                            Sticker thumb file ID: `{}`\n\
                             Sticker thumb pixels: _{}x{}_\
                         ",
                         thumb.file_id,
@@ -497,8 +497,8 @@ impl Id {
             } => {
                 // Build generic info
                 let mut info = format!("\
-                        Kind: _video_\n\
-                        Video file ID: _{}_\n\
+                        Kind: `video`\n\
+                        Video file ID: `{}`\n\
                         Video pixels: _{}x{}_\n\
                         Video length: _{}_\
                     ",
@@ -511,7 +511,7 @@ impl Id {
                 // Append the thumbnail information
                 if let Some(ref thumb) = data.thumb {
                     info += &format!("\n\
-                            Video thumb file ID: _{}_\n\
+                            Video thumb file ID: `{}`\n\
                             Video thumb pixels: _{}x{}_\
                         ",
                         thumb.file_id,
@@ -531,7 +531,7 @@ impl Id {
                 // Append the mime type
                 if let Some(ref mime) = data.mime_type {
                     info += &format!(
-                        "\nVideo file mime: _{}_",
+                        "\nVideo file mime: `{}`",
                         mime,
                     );
                 }
@@ -559,8 +559,8 @@ impl Id {
             } => {
                 // Build generic info
                 let mut info = format!("\
-                        Kind: _voice_\n\
-                        Voice file ID: _{}_\n\
+                        Kind: `voice`\n\
+                        Voice file ID: `{}`\n\
                         Voice length: _{}_\
                     ",
                     data.file_id,
@@ -570,7 +570,7 @@ impl Id {
                 // Append the mime type
                 if let Some(ref mime) = data.mime_type {
                     info += &format!(
-                        "\nVoice file mime: _{}_",
+                        "\nVoice file mime: `{}`",
                         mime,
                     );
                 }
@@ -590,8 +590,8 @@ impl Id {
             } => {
                 // Build generic info
                 let mut info = format!("\
-                        Kind: _video note_\n\
-                        Note file ID: _{}_\n\
+                        Kind: `video note`\n\
+                        Note file ID: `{}`\n\
                         Note length: _{}_\
                     ",
                     data.file_id,
@@ -601,7 +601,7 @@ impl Id {
                 // Append the thumbnail information
                 if let Some(ref thumb) = data.thumb {
                     info += &format!("\n\
-                            Note thumb file ID: _{}_\n\
+                            Note thumb file ID: `{}`\n\
                             Note thumb pixels: _{}x{}_\
                         ",
                         thumb.file_id,
@@ -633,7 +633,7 @@ impl Id {
             } => {
                 // Build generic info
                 let mut info = format!("\
-                        Kind: _contact_\n\
+                        Kind: `contact`\n\
                         Contact phone: _{}_\n\
                         Contact first name: _{}_\
                     ",
@@ -652,7 +652,7 @@ impl Id {
                 // Append the user ID
                 if let Some(ref id) = data.user_id {
                     info += &format!(
-                        "\nContact user ID: _{}_",
+                        "\nContact user ID: `{}`",
                         id,
                     );
                 }
@@ -662,9 +662,9 @@ impl Id {
             MessageKind::Location {
                 data,
             } => format!("\
-                        Kind: _location_\n\
-                        Location longitude: _{}_\n\
-                        Location latitude: _{}_\
+                        Kind: `location`\n\
+                        Location longitude: `{}`\n\
+                        Location latitude: `{}`\
                     ",
                     data.longitude,
                     data.latitude,
@@ -674,9 +674,9 @@ impl Id {
             } => {
                 // Build generic info
                 let mut info = format!("\
-                        Kind: _venue_\n\
-                        Venue loc longitude: _{}_\n\
-                        Venue loc latitude: _{}_\n\
+                        Kind: `venue`\n\
+                        Venue loc longitude: `{}`\n\
+                        Venue loc latitude: `{}`\n\
                         Venue title: _{}_\n\
                         Venue address: _{}_\
                     ",
@@ -689,7 +689,7 @@ impl Id {
                 // Append the foursquare ID
                 if let Some(ref id) = data.foursquare_id {
                     info += &format!(
-                        "\nVenue foursquare ID: _{}_",
+                        "\nVenue foursquare ID: `{}`",
                         id,
                     );
                 }
@@ -701,7 +701,7 @@ impl Id {
             } => {
                 // Build generic info
                 let mut info = format!("\
-                        Kind: _chat members joined_\n\
+                        Kind: `chat members joined`\n\
                         Joined users: _{}_\
                     ",
                     data.len(),
@@ -710,7 +710,7 @@ impl Id {
                 // Loop through the users
                 for (i, user) in data.iter().enumerate() {
                     info += &format!(
-                        "\nJoined user #{} ID: _{}_",
+                        "\nJoined user #{} ID: `{}`",
                         i,
                         user.id,
                     );
@@ -721,15 +721,15 @@ impl Id {
             MessageKind::LeftChatMember {
                 data,
             } => format!("\
-                        Kind: _chat member left_\n\
-                        Left user ID: _{}_\n\
+                        Kind: `chat member left`\n\
+                        Left user ID: `{}`\n\
                     ",
                     data.id,
                 ),
             MessageKind::NewChatTitle {
                 data,
             } => format!("\
-                        Kind: _new chat title_\n\
+                        Kind: `new chat title`\n\
                         New title: _{}_\
                     ",
                     data,
@@ -739,8 +739,8 @@ impl Id {
             } => {
                 // Build generic info
                 let mut info = format!("\
-                        Kind: _new chat photo_\n\
-                        Photo file ID: _{}_\n\
+                        Kind: `new chat photo`\n\
+                        Photo file ID: `{}`\n\
                         Photo pixels: _{}x{}_\
                     ",
                     data.file_id,
@@ -759,34 +759,34 @@ impl Id {
                 info
             },
             MessageKind::DeleteChatPhoto =>
-                String::from("Kind: _deleted chat photo_"),
+                String::from("Kind: `deleted chat photo`"),
             MessageKind::GroupChatCreated =>
-                String::from("Kind: _created group chat_"),
+                String::from("Kind: `created group chat`"),
             MessageKind::SupergroupChatCreated =>
-                String::from("Kind: _created supergroup chat_"),
+                String::from("Kind: `created supergroup chat`"),
             MessageKind::ChannelChatCreated =>
-                String::from("Kind: _created channel chat_"),
+                String::from("Kind: `created channel chat`"),
             MessageKind::MigrateToChatId {
                 data,
             } => format!("\
-                        Kind: _migrated to chat ID_\n\
-                        New chat ID: _{}_\n\
+                        Kind: `migrated to chat ID`\n\
+                        New chat ID: `{}`\n\
                     ",
                     data,
                 ),
             MessageKind::MigrateFromChatId {
                 data,
             } => format!("\
-                        Kind: _migrated from chat ID_\n\
-                        Old chat ID: _{}_\n\
+                        Kind: `migrated from chat ID`\n\
+                        Old chat ID: `{}`\n\
                     ",
                     data,
                 ),
             MessageKind::PinnedMessage { .. } =>
                 // TODO: describe the pinned message
-                String::from("Kind: _pinned message_"),
+                String::from("Kind: `pinned message`"),
             MessageKind::Unknown { .. } =>
-                String::from("Kind: _?_"),
+                String::from("Kind: `?`"),
         }
     }
 
@@ -832,8 +832,8 @@ impl Action for Id {
                 info.push(Self::build_msg_info(&msg, "Your message"));
 
                 // Information about a quoted message by the sender
-                if let Some(reply_to) = msg.reply_to_message {
-                    info.push(Self::build_msg_channel_post_info(&*reply_to, "Your quoted message"));
+                if let Some(ref reply_to) = msg.reply_to_message {
+                    info.push(Self::build_msg_channel_post_info(reply_to, "Your quoted message"));
                 }
 
                 // Information about the answer message and the chat
@@ -843,10 +843,18 @@ impl Action for Id {
                 // Add information about the bot
                 info.push(Self::build_user_info(&msg_answer.from, "Bot"));
 
+                // Tell a user he may reply to an existing message
+                if msg.reply_to_message.is_none() {
+                    info.push(String::from(
+                        "_Note: reply to an existing message with /id to show it's details._"
+                    ));
+                }
+
                 // Send the help message
                 api.spawn(
                     msg_answer.edit_text(info.join("\n\n"))
-                        .parse_mode(ParseMode::Markdown),
+                        .parse_mode(ParseMode::Markdown)
+                        .disable_preview(),
                 );
             }
 
