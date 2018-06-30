@@ -26,6 +26,9 @@ pub trait Action {
         cmd.trim().eq_ignore_ascii_case(self.cmd())
     }
 
+    /// Whether this command is hidden from `/help` output and such.
+    fn hidden(&self) -> bool;
+
     /// Short help information for this action.
     fn help(&self) -> &'static str;
 

@@ -14,6 +14,9 @@ use super::super::handler::ACTIONS;
 /// The action command name.
 const CMD: &'static str = "help";
 
+/// Whether the action is hidden.
+const HIDDEN: bool = false;
+
 /// The action help.
 const HELP: &'static str = "Show help";
 
@@ -30,6 +33,10 @@ impl Action for Help {
         CMD
     }
 
+    fn hidden(&self) -> bool {
+        HIDDEN
+    }
+
     fn help(&self) -> &'static str {
         HELP
     }
@@ -37,6 +44,7 @@ impl Action for Help {
     fn invoke(&self, msg: &Message, api: &Api) -> Box<Future<Item = (), Error = ()>> {
         // Build the command list
         let mut cmds: Vec<String> = ACTIONS.iter()
+            .filter(|action| !action.hidden())
             .map(|action| format!(
                 "/{}: _{}_",
                 action.cmd(),

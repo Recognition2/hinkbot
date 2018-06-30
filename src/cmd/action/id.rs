@@ -31,6 +31,9 @@ use super::Action;
 /// The action command name.
 const CMD: &'static str = "id";
 
+/// Whether the action is hidden.
+const HIDDEN: bool = false;
+
 /// The action help.
 const HELP: &'static str = "Show hidden message/chat details";
 
@@ -802,6 +805,10 @@ impl Id {
 impl Action for Id {
     fn cmd(&self) -> &'static str {
         CMD
+    }
+
+    fn hidden(&self) -> bool {
+        HIDDEN
     }
 
     fn help(&self) -> &'static str {

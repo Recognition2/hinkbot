@@ -18,6 +18,7 @@ use super::action::test::Test;
 
 lazy_static! {
     /// A list of all available and invokable actions.
+    /// This list includes hidden actions which may be filtered using the `.hidden()` propery.
     pub static ref ACTIONS: Vec<Box<dyn Action + Sync>> = vec![
         Box::new(Exec::new()),
         Box::new(Help::new()),

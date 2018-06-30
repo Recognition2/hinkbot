@@ -14,6 +14,9 @@ use super::Action;
 /// The action command name.
 const CMD: &'static str = "risc";
 
+/// Whether the action is hidden.
+const HIDDEN: bool = false;
+
 /// The action help.
 const HELP: &'static str = "RISC info";
 
@@ -28,6 +31,10 @@ impl Risc {
 impl Action for Risc {
     fn cmd(&self) -> &'static str {
         CMD
+    }
+
+    fn hidden(&self) -> bool {
+        HIDDEN
     }
 
     fn help(&self) -> &'static str {

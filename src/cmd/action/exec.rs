@@ -24,6 +24,9 @@ use super::Action;
 /// The action command name.
 const CMD: &'static str = "exec";
 
+/// Whether the action is hidden.
+const HIDDEN: bool = false;
+
 /// The action help.
 const HELP: &'static str = "Execute a shell command";
 
@@ -89,6 +92,10 @@ impl Exec {
 impl Action for Exec {
     fn cmd(&self) -> &'static str {
         CMD
+    }
+
+    fn hidden(&self) -> bool {
+        HIDDEN
     }
 
     fn help(&self) -> &'static str {
