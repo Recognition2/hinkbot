@@ -40,10 +40,11 @@ impl Action for Risc {
                 "\
                     `{} v{}`\n\
                     \n\
-                    Source: https://gitlab.com/timvisee/risc-bot\n\
-                    \n\
                     Developed by @timvisee\n\
-                    https://timvisee.com/\
+                    https://timvisee.com/\n\
+                    \n\
+                    Source:\n\
+                    https://gitlab.com/timvisee/risc-bot\
                 ",
                 NAME,
                 VERSION,

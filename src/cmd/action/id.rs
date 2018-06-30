@@ -225,12 +225,9 @@ impl Id {
     /// Build the info part for the given chat.
     pub fn build_chat_info(chat: &MessageChat, caption: &str) -> String {
         // Build the base info
-        let mut info = format!("\
-                *{}:*\n\
-                ID: _{}_\
-            ",
+        let mut info = format!(
+            "*{}:*",
             caption,
-            chat.id(),
         );
 
         // Add details
@@ -501,9 +498,9 @@ impl Id {
                 // Build generic info
                 let mut info = format!("\
                         Kind: _video_\n\
-                        Video file ID: _{}_\
-                        Video pixels: _{}x{}_\
-                        Video length: _{} s_\
+                        Video file ID: _{}_\n\
+                        Video pixels: _{}x{}_\n\
+                        Video length: _{}_\
                     ",
                     data.file_id,
                     data.width,
@@ -563,8 +560,8 @@ impl Id {
                 // Build generic info
                 let mut info = format!("\
                         Kind: _voice_\n\
-                        Voice file ID: _{}_\
-                        Voice length: _{} s_\
+                        Voice file ID: _{}_\n\
+                        Voice length: _{}_\
                     ",
                     data.file_id,
                     format_duration(Duration::from_secs(data.duration as u64)),
@@ -594,8 +591,8 @@ impl Id {
                 // Build generic info
                 let mut info = format!("\
                         Kind: _video note_\n\
-                        Note file ID: _{}_\
-                        Note length: _{} s_\
+                        Note file ID: _{}_\n\
+                        Note length: _{}_\
                     ",
                     data.file_id,
                     format_duration(Duration::from_secs(data.duration as u64)),
@@ -733,7 +730,7 @@ impl Id {
                 data,
             } => format!("\
                         Kind: _new chat title_\n\
-                        New title: _{}_\n\
+                        New title: _{}_\
                     ",
                     data,
                 ),
