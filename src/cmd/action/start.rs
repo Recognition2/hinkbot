@@ -38,8 +38,8 @@ impl Action for Start {
         api.spawn(
             msg.text_reply(format!("\
                     *Welcome {}!*\n\
-                    \n
-                    To start using this bot, see the list of available commands by typing /help\
+                    \n\
+                    To start using this bot, see the list of available commands by sending /help\
                 ",
                 msg.from.first_name,
             ))
