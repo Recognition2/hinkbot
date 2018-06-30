@@ -39,6 +39,9 @@ impl Action for Risc {
             msg.text_reply(format!(
                 "\
                     `{} v{}`\n\
+                    \n\
+                    Source: https://gitlab.com/timvisee/risc-bot\n\
+                    \n\
                     Developed by @timvisee\n\
                     https://timvisee.com/\
                 ",
