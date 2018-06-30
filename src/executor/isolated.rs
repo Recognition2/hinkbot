@@ -32,7 +32,7 @@ pub fn execute<O>(cmd: String, output: O)
         .args(&["--workdir", "/root"])
         .args(&["--restart", "no"])
         .args(&["--stop-timeout", "1"])
-        .arg("genimi-exec")
+        .arg("risc-exec")
         .args(&["timeout", "--signal=SIGTERM", "--kill-after=65", "60"])
         .args(&["bash", "-c", &cmd]);
 

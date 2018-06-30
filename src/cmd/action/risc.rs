@@ -12,20 +12,20 @@ use app::{NAME, VERSION};
 use super::Action;
 
 /// The action command name.
-const CMD: &'static str = "genimi";
+const CMD: &'static str = "risc";
 
 /// The action help.
-const HELP: &'static str = "Genimi info";
+const HELP: &'static str = "RISC info";
 
-pub struct Genimi;
+pub struct Risc;
 
-impl Genimi {
+impl Risc {
     pub fn new() -> Self {
-        Genimi
+        Risc
     }
 }
 
-impl Action for Genimi {
+impl Action for Risc {
     fn cmd(&self) -> &'static str {
         CMD
     }

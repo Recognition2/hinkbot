@@ -14,7 +14,7 @@ use super::Action;
 const CMD: &'static str = "ping";
 
 /// The action help.
-const HELP: &'static str = "Ping Genimi";
+const HELP: &'static str = "Ping RISC";
 
 pub struct Ping;
 

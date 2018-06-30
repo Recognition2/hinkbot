@@ -1,5 +1,5 @@
 pub mod exec;
-pub mod genimi;
+pub mod risc;
 pub mod help;
 pub mod ping;
 pub mod test;

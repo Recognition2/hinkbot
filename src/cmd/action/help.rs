@@ -49,7 +49,7 @@ impl Action for Help {
         // Send the help message
         api.spawn(
             msg.text_reply(format!(
-                "*Genimi commands:*\n{}",
+                "*RISC commands:*\n{}",
                 cmd_list,
             ))
             .parse_mode(ParseMode::Markdown),
