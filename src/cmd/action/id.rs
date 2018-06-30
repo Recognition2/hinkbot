@@ -9,6 +9,8 @@ use futures::{
     future::ok,
     Future,
 };
+use humansize::{FileSize, file_size_opts};
+use humantime::format_duration;
 use telegram_bot::{
     Api,
     prelude::*,
@@ -108,7 +110,7 @@ impl Id {
         // Append the reply details
         info += &format!(
             "\nIs reply: _{}_",
-            Self::yes_no(msg.reply_to_message.is_some()),
+            Self::format_yes_no(msg.reply_to_message.is_some()),
         );
 
         // Append forwarder information if availalbe
@@ -174,7 +176,7 @@ impl Id {
         // Append the reply details
         info += &format!(
             "\nIs reply: _{}_",
-            Self::yes_no(msg.reply_to_message.is_some()),
+            Self::format_yes_no(msg.reply_to_message.is_some()),
         );
 
         // Append forwarder information if availalbe
@@ -263,12 +265,18 @@ impl Id {
     }
 
     /// Get `yes` or `no` if `true` or `false`.
-    pub fn yes_no(b: bool) -> &'static str {
+    pub fn format_yes_no(b: bool) -> &'static str {
         if b {
             "yes"
         } else {
             "no"
         }
+    }
+
+    /// Format the given file size in a human readable format.
+    pub fn format_file_size(size: &i64) -> String {
+        size.file_size(file_size_opts::BINARY)
+            .unwrap_or(format!("{} B", size))
     }
 
     /// Build message kind details.
@@ -280,14 +288,13 @@ impl Id {
                 data,
             } => {
                 // Build generic info
-                // TODO: format length
                 let mut info = format!("\
                         Kind: _audio_\n\
                         Audio file ID: _{}_\n\
-                        Audio length: _{} s_\
+                        Audio length: _{}_\
                     ",
                     data.file_id,
-                    data.duration,
+                    format_duration(Duration::from_secs(data.duration as u64)),
                 );
 
                 // Append the performer name
@@ -315,11 +322,10 @@ impl Id {
                 }
 
                 // Append the file size
-                // TODO: format file size
                 if let Some(ref size) = data.file_size {
                     info += &format!(
                         "\nAudio size: _{} b_",
-                        size,
+                        Self::format_file_size(size),
                     );
                 }
 
@@ -330,7 +336,6 @@ impl Id {
                 caption,
             } => {
                 // Build generic info
-                // TODO: format length
                 let mut info = format!("\
                         Kind: _document_\n\
                         Document file ID: _{}_\
@@ -351,10 +356,9 @@ impl Id {
 
                     // Append the thumbnail file size
                     if let Some(ref size) = thumb.file_size {
-                        // TODO: format the file size
                         info += &format!(
-                            "\nDocument size: _{} b_",
-                            size,
+                            "\nDocument size: _{}_",
+                            Self::format_file_size(size),
                         );
                     }
                 }
@@ -377,10 +381,9 @@ impl Id {
 
                 // Append the file size
                 if let Some(ref size) = data.file_size {
-                    // TODO: format file size
                     info += &format!(
-                        "\nDocument size: _{} b_",
-                        size,
+                        "\nDocument size: _{}_",
+                        Self::format_file_size(size),
                     );
                 }
 
@@ -400,7 +403,6 @@ impl Id {
                 caption,
             } => {
                 // Build generic info
-                // TODO: format length
                 let mut info = format!("\
                         Kind: _photo_\n\
                         Photos: _{}_\
@@ -423,11 +425,10 @@ impl Id {
 
                     // Append the thumbnail file size
                     if let Some(ref size) = photo.file_size {
-                        // TODO: format the file size
                         info += &format!(
-                            "\nPhoto #{} size: _{} b_",
+                            "\nPhoto #{} size: _{}_",
                             i,
-                            size,
+                            Self::format_file_size(size),
                         );
                     }
                 }
@@ -447,7 +448,6 @@ impl Id {
                 data,
             } => {
                 // Build generic info
-                // TODO: format length
                 let mut info = format!("\
                         Kind: _sticker_\n\
                         Sticker file ID: _{}_\n\
@@ -471,10 +471,9 @@ impl Id {
 
                     // Append the thumbnail file size
                     if let Some(ref size) = thumb.file_size {
-                        // TODO: format the file size
                         info += &format!(
-                            "\nSticker thumb size: _{} b_",
-                            size,
+                            "\nSticker thumb size: _{}_",
+                            Self::format_file_size(size),
                         );
                     }
                 }
@@ -489,10 +488,9 @@ impl Id {
 
                 // Append the file size
                 if let Some(ref size) = data.file_size {
-                    // TODO: format file size
                     info += &format!(
-                        "\nSticker size: _{} b_",
-                        size,
+                        "\nSticker size: _{}_",
+                        Self::format_file_size(size),
                     );
                 }
 
@@ -503,7 +501,6 @@ impl Id {
                 caption,
             } => {
                 // Build generic info
-                // TODO: format length
                 let mut info = format!("\
                         Kind: _video_\n\
                         Video file ID: _{}_\
@@ -513,7 +510,7 @@ impl Id {
                     data.file_id,
                     data.width,
                     data.height,
-                    data.duration,
+                    format_duration(Duration::from_secs(data.duration as u64)),
                 );
 
                 // Append the thumbnail information
@@ -529,10 +526,9 @@ impl Id {
 
                     // Append the thumbnail file size
                     if let Some(ref size) = thumb.file_size {
-                        // TODO: format the file size
                         info += &format!(
-                            "\nVideo thumb size: _{} b_",
-                            size,
+                            "\nVideo thumb size: _{}_",
+                            Self::format_file_size(size),
                         );
                     }
                 }
@@ -547,10 +543,9 @@ impl Id {
 
                 // Append the file size
                 if let Some(ref size) = data.file_size {
-                    // TODO: format file size
                     info += &format!(
-                        "\nVideo size: _{} b_",
-                        size,
+                        "\nVideo size: _{}_",
+                        Self::format_file_size(size),
                     );
                 }
 
@@ -569,14 +564,13 @@ impl Id {
                 data,
             } => {
                 // Build generic info
-                // TODO: format length
                 let mut info = format!("\
                         Kind: _voice_\n\
                         Voice file ID: _{}_\
                         Voice length: _{} s_\
                     ",
                     data.file_id,
-                    data.duration,
+                    format_duration(Duration::from_secs(data.duration as u64)),
                 );
 
                 // Append the mime type
@@ -589,10 +583,9 @@ impl Id {
 
                 // Append the file size
                 if let Some(ref size) = data.file_size {
-                    // TODO: format file size
                     info += &format!(
-                        "\nVoice size: _{} b_",
-                        size,
+                        "\nVoice size: _{}_",
+                        Self::format_file_size(size),
                     );
                 }
 
@@ -602,14 +595,13 @@ impl Id {
                 data,
             } => {
                 // Build generic info
-                // TODO: format length
                 let mut info = format!("\
                         Kind: _video note_\n\
                         Note file ID: _{}_\
                         Note length: _{} s_\
                     ",
                     data.file_id,
-                    data.duration,
+                    format_duration(Duration::from_secs(data.duration as u64)),
                 );
 
                 // Append the thumbnail information
@@ -625,20 +617,18 @@ impl Id {
 
                     // Append the thumbnail file size
                     if let Some(ref size) = thumb.file_size {
-                        // TODO: format the file size
                         info += &format!(
-                            "\nNote thumb size: _{} b_",
-                            size,
+                            "\nNote thumb size: _{}_",
+                            Self::format_file_size(size),
                         );
                     }
                 }
 
                 // Append the file size
                 if let Some(ref size) = data.file_size {
-                    // TODO: format file size
                     info += &format!(
-                        "\nNote size: _{} b_",
-                        size,
+                        "\nNote size: _{}_",
+                        Self::format_file_size(size),
                     );
                 }
 
@@ -648,7 +638,6 @@ impl Id {
                 data,
             } => {
                 // Build generic info
-                // TODO: format length
                 let mut info = format!("\
                         Kind: _contact_\n\
                         Contact phone: _{}_\n\
@@ -767,10 +756,9 @@ impl Id {
 
                 // Append the file size
                 if let Some(ref size) = data.file_size {
-                    // TODO: format the file size
                     info += &format!(
-                        "\nPhoto size: _{} b_",
-                        size,
+                        "\nPhoto size: _{}_",
+                        Self::format_file_size(size),
                     );
                 }
 

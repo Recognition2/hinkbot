@@ -1,5 +1,7 @@
 extern crate chrono;
 extern crate futures;
+extern crate humansize;
+extern crate humantime;
 #[macro_use]
 extern crate lazy_static;
 extern crate regex;
