@@ -13,6 +13,7 @@ use super::action::help::Help;
 use super::action::id::Id;
 use super::action::ping::Ping;
 use super::action::risc::Risc;
+use super::action::start::Start;
 use super::action::test::Test;
 
 lazy_static! {
@@ -23,6 +24,7 @@ lazy_static! {
         Box::new(Id::new()),
         Box::new(Ping::new()),
         Box::new(Risc::new()),
+        Box::new(Start::new()),
         Box::new(Test::new()),
     ];
 }

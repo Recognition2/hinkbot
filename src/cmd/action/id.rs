@@ -389,7 +389,6 @@ impl Id {
 
                 // Append the caption
                 if let Some(caption) = caption {
-                    // TODO: format file size
                     info += &format!(
                         "\nDocument caption: _{}_",
                         caption,
@@ -435,7 +434,6 @@ impl Id {
 
                 // Append the caption
                 if let Some(caption) = caption {
-                    // TODO: format file size
                     info += &format!(
                         "\nDocument caption: _{}_",
                         caption,
@@ -551,7 +549,6 @@ impl Id {
 
                 // Append the caption
                 if let Some(caption) = caption {
-                    // TODO: format file size
                     info += &format!(
                         "\nVideo caption: _{}_",
                         caption,
