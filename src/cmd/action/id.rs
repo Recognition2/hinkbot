@@ -400,6 +400,7 @@ impl Id {
             MessageKind::Photo {
                 data,
                 caption,
+                media_group_id,
             } => {
                 // Build generic info
                 let mut info = format!("\
@@ -430,6 +431,14 @@ impl Id {
                             Self::format_file_size(size),
                         );
                     }
+                }
+
+                // Append the media group
+                if let Some(id) = media_group_id {
+                    info += &format!(
+                        "\nDocument media group ID: `{}`",
+                        id,
+                    );
                 }
 
                 // Append the caption
@@ -497,6 +506,7 @@ impl Id {
             MessageKind::Video {
                 data,
                 caption,
+                media_group_id,
             } => {
                 // Build generic info
                 let mut info = format!("\
@@ -544,6 +554,14 @@ impl Id {
                     info += &format!(
                         "\nVideo size: _{}_",
                         Self::format_file_size(size),
+                    );
+                }
+
+                // Append the media group
+                if let Some(id) = media_group_id {
+                    info += &format!(
+                        "\nVideo media group ID: `{}`",
+                        id,
                     );
                 }
 
@@ -743,20 +761,33 @@ impl Id {
                 // Build generic info
                 let mut info = format!("\
                         Kind: `new chat photo`\n\
-                        Photo file ID: `{}`\n\
-                        Photo pixels: _{}x{}_\
+                        Photos: _{}_\
                     ",
-                    data.file_id,
-                    data.width,
-                    data.height,
+                    data.len(),
                 );
 
-                // Append the file size
-                if let Some(ref size) = data.file_size {
-                    info += &format!(
-                        "\nPhoto size: _{}_",
-                        Self::format_file_size(size),
+                // Append details for each photo
+                for (i, photo) in data.iter().enumerate() {
+                    // Add the photo details
+                    info += &format!("\n\
+                            Photo #{} file ID: `{}`\n\
+                            Photo #{} pixels: _{}x{}_\
+                        ",
+                        i,
+                        photo.file_id,
+                        i,
+                        photo.width,
+                        photo.height,
                     );
+
+                    // Append the file size
+                    if let Some(ref size) = photo.file_size {
+                        info += &format!(
+                            "\nPhoto #{} size: _{}_",
+                            i,
+                            Self::format_file_size(size),
+                        );
+                    }
                 }
 
                 info

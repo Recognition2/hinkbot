@@ -1,6 +1,5 @@
 extern crate chrono;
-extern crate futures;
-extern crate humansize;
+extern crate futures; extern crate humansize;
 extern crate humantime;
 #[macro_use]
 extern crate lazy_static;
@@ -48,23 +47,14 @@ fn main() {
         })
 
         // Route new messages through the message handler, drop other updates
-        .then(|update| {
-            match update {
-                Ok(update) => {
-                    if let UpdateKind::Message(message) = update.kind {
-                        // Build a future to process the message, spawn it on the reactor
-                        core_handle.spawn(Handler::handle(message, &api));
-                    }
-                },
-                Err(err) => println!("GOT ERR FROM STREAM: {:?}", err),
+        .for_each(|update| {
+            if let UpdateKind::Message(message) = update.kind {
+                // Build a future to process the message, spawn it on the reactor
+                core_handle.spawn(Handler::handle(message, &api));
             }
 
             ok(())
-        })
-
-        // TODO: fix this hack, properly report Telegram stream errors
-        .map_err(|_: ()| ())
-        .for_each(|_| ok(()));
+        });
 
     // Run the bot handling future in the reactor
     core.run(future).unwrap();
