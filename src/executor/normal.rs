@@ -20,31 +20,30 @@ pub fn execute<O>(cmd: &mut Command, output: O)
     where
         O: Fn(String) -> Result<(), ()> + Clone + 'static
 {
-    // Spawn an isolated container to run the user command in
+    // Spawn a child process to run the given command in
     // TODO: configurable timeout
-    // TODO: also handle a timeout fallback outside the actual container
-    // TODO: map container UIDs to something above 10k
     let mut process = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn_async()
         .unwrap();
 
-    // Build an stdout and stderr reader to process output
+    // Build process output streams, process each line with the output closure
     let stdout_reader = BufReader::new(process.stdout().take().unwrap());
     let stderr_reader = BufReader::new(process.stderr().take().unwrap());
     let stdout_stream = lines(stdout_reader).map_err(|_| ()).for_each(output.clone());
     let stderr_stream = lines(stderr_reader).map_err(|_| ()).for_each(output);
 
-    // Create a future for when the process exists and the status code is known
-    let process_exit = process.wait_with_output()
+    // Wait for the child process to exit, catch the status code
+    let process_exit = process
+        .wait_with_output()
         .map(|output| output.status)
         .map_err(|_| ());
 
-    // Create a future for when running the process fully completes
-    let process_complete = process_exit
-        .join3(stdout_stream, stderr_stream)
-        .map(|(status, _, _)| status);
-
-    Box::new(process_complete)
+    // Wait on the output streams and on a status code, return the future
+    Box::new(
+        process_exit
+            .join3(stdout_stream, stderr_stream)
+            .map(|(status, _, _)| status),
+    )
 }
