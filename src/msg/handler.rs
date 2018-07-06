@@ -13,7 +13,10 @@ use telegram_bot::{
     types::{Message, MessageChat, MessageKind, ParseMode},
 };
 
-use cmd::handler::Handler as CmdHandler;
+use cmd::handler::{
+    Error as CmdHandlerError,
+    Handler as CmdHandler,
+};
 
 lazy_static! {
     /// A regex for matching messages that contain a command.
@@ -39,18 +42,18 @@ impl Handler {
                 // Route the message to the command handler, if it's a command
                 if let Some(cmd) = matches_cmd(data) {
                     return Box::new(
-                        CmdHandler::handle(cmd, msg.clone(), api)
-                            .map_err(|_| Error::HandleCmd),
+                        CmdHandler::handle(cmd, msg.clone(), api).from_err(),
                     );
                 }
 
                 // Route private messages
                 match &msg.chat {
                     MessageChat::Private(..) =>
-                        return Box::new(Self::handle_private(&msg, api)),
+                        return Box::new(
+                            Self::handle_private(&msg, api),
+                        ),
                     _ => {},
                 }
-
             },
             _ => {},
         }
@@ -89,14 +92,21 @@ fn matches_cmd(msg: &str) -> Option<&str> {
     }
 }
 
+/// A message handler error.
 #[derive(Debug, Fail)]
-// TODO: add causes
 pub enum Error {
-    /// An error occurred while handling a command.
-    #[fail(display = "failed to handle command message")]
-    HandleCmd,
+    /// An error occurred while processing a command.
+    #[fail(display = "failed to process command message")]
+    HandleCmd(#[cause] CmdHandlerError),
 
-    /// An error occurred while handling a private message.
-    #[fail(display = "failed to handle private message")]
+    /// An error occurred while processing a private message.
+    #[fail(display = "failed to process private message")]
     HandlePrivate(#[cause] SyncFailure<TelegramError>),
+}
+
+/// Convert a command handler error into a message handling error.
+impl From<CmdHandlerError> for Error {
+    fn from(err: CmdHandlerError) -> Error {
+        Error::HandleCmd(err)
+    }
 }

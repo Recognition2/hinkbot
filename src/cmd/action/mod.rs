@@ -33,5 +33,6 @@ pub trait Action {
     fn help(&self) -> &'static str;
 
     /// Invoke the action with the given context.
-    fn invoke(&self, msg: &Message, api: &Api) -> Box<Future<Item = (), Error = ()>>;
+    fn invoke(&self, msg: &Message, api: &Api)
+        -> Box<Future<Item = (), Error = ()>>;
 }

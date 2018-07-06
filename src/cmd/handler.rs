@@ -36,15 +36,23 @@ pub struct Handler;
 impl Handler {
     /// Handle the given command.
     pub fn handle(cmd: &str, msg: Message, api: &Api)
-        -> Box<Future<Item = (), Error = ()>>
+        -> Box<Future<Item = (), Error = Error>>
     {
         // Invoke the proper action
         let action = ACTIONS.iter()
             .find(|a| a.is_cmd(cmd));
         if let Some(action) = action {
-            action.invoke(&msg, api)
+            Box::new(action.invoke(&msg, api).map_err(|_| Error::Cmd))
         } else {
             Box::new(ok(()))
         }
     }
+}
+
+#[derive(Debug, Fail)]
+// TODO: add causes
+pub enum Error {
+    /// An error occurred while handling a command.
+    #[fail(display = "failed to execute command")]
+    Cmd,
 }
