@@ -123,6 +123,7 @@ impl Action for Exec {
 
             // Provide the user with feedback if no command is entered
             if cmd.trim().is_empty() {
+                // TODO: return a future
                 api.spawn(
                     msg.text_reply("\
                         Please provide a command to run.\n\

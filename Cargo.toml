@@ -5,6 +5,8 @@ authors = ["timvisee <timvisee@gmail.com>"]
 
 [dependencies]
 chrono = "0.4"
+colored = "1.6"
+failure = "0.1"
 futures = "0.1"
 humansize = "0.1"
 humantime = "1.1"

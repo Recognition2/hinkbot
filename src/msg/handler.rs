@@ -1,3 +1,6 @@
+use std::time::Duration;
+
+use failure::SyncFailure;
 use futures::{
     Future,
     future::ok,
@@ -5,6 +8,7 @@ use futures::{
 use regex::Regex;
 use telegram_bot::{
     Api,
+    Error as TelegramError,
     prelude::*,
     types::{Message, MessageChat, MessageKind, ParseMode},
 };
@@ -25,7 +29,7 @@ pub struct Handler;
 impl Handler {
     /// Handle the given message.
     pub fn handle(msg: Message, api: &Api)
-        -> Box<Future<Item = (), Error = ()>>
+        -> Box<Future<Item = (), Error = Error>>
     {
         match &msg.kind {
             MessageKind::Text {
@@ -34,14 +38,16 @@ impl Handler {
             } => {
                 // Route the message to the command handler, if it's a command
                 if let Some(cmd) = matches_cmd(data) {
-                    return CmdHandler::handle(cmd, msg.clone(), api);
+                    return Box::new(
+                        CmdHandler::handle(cmd, msg.clone(), api)
+                            .map_err(|_| Error::HandleCmd),
+                    );
                 }
 
                 // Route private messages
                 match &msg.chat {
-                    MessageChat::Private(..) => {
-                        return Self::handle_private(&msg, api);
-                    },
+                    MessageChat::Private(..) =>
+                        return Box::new(Self::handle_private(&msg, api)),
                     _ => {},
                 }
 
@@ -54,16 +60,20 @@ impl Handler {
 
     /// Handle the give private/direct message.
     pub fn handle_private(msg: &Message, api: &Api)
-        -> Box<Future<Item = (), Error = ()>>
+        -> impl Future<Item = (), Error = Error>
     {
-        api.spawn(msg.text_reply(
-            format!(
-                "`BLEEP BLOOP`\n`I AM A BOT`\n\n{}, direct messages are not supported yet.",
-                msg.from.first_name,
+        // Send a message to the user
+        // TODO: make timeout configurable
+        api.send_timeout(
+                msg.text_reply(format!(
+                        "`BLEEP BLOOP`\n`I AM A BOT`\n\n{}, direct messages are not supported yet.",
+                        msg.from.first_name,
+                    ))
+                    .parse_mode(ParseMode::Markdown),
+                Duration::from_secs(10),
             )
-        ).parse_mode(ParseMode::Markdown));
-
-        Box::new(ok(()))
+            .map(|_| ())
+            .map_err(|err| Error::HandlePrivate(SyncFailure::new(err)))
     }
 }
 
@@ -77,4 +87,16 @@ fn matches_cmd(msg: &str) -> Option<&str> {
     } else {
         None
     }
+}
+
+#[derive(Debug, Fail)]
+// TODO: add causes
+pub enum Error {
+    /// An error occurred while handling a command.
+    #[fail(display = "failed to handle command message")]
+    HandleCmd,
+
+    /// An error occurred while handling a private message.
+    #[fail(display = "failed to handle private message")]
+    HandlePrivate(#[cause] SyncFailure<TelegramError>),
 }
