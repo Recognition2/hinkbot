@@ -1,10 +1,13 @@
-use failure::Error as FailureError;
-use futures::{
-    future::ok,
-    Future,
+use std::time::Duration;
+
+use failure::{
+    Error as FailureError,
+    SyncFailure,
 };
+use futures::Future;
 use telegram_bot::{
     Api,
+    Error as TelegramError,
     prelude::*,
     types::{Message, ParseMode},
 };
@@ -44,18 +47,30 @@ impl Action for Start {
     fn invoke(&self, msg: &Message, api: &Api)
         -> Box<Future<Item = (), Error = FailureError>>
     {
-        // Send the help message
-        api.spawn(
-            msg.text_reply(format!("\
-                    *Welcome {}!*\n\
-                    \n\
-                    To start using this bot, see the list of available commands by sending /help\
-                ",
-                msg.from.first_name,
-            ))
-            .parse_mode(ParseMode::Markdown),
-        );
+        // Build a future for sending the response start message
+        let future = api.send_timeout(
+                msg.text_reply(format!("\
+                            *Welcome {}!*\n\
+                            \n\
+                            To start using this bot, see the list of available commands by sending /help\
+                        ",
+                        msg.from.first_name,
+                    ))
+                    .parse_mode(ParseMode::Markdown),
+                Duration::from_secs(10),
+            )
+            .map(|_| ())
+            .map_err(|err| Error::Respond(SyncFailure::new(err)))
+            .from_err();
 
-        Box::new(ok(()))
+        Box::new(future)
     }
+}
+
+/// A start action error.
+#[derive(Debug, Fail)]
+pub enum Error {
+    /// An error occurred while sending a response message to the user.
+    #[fail(display = "failed to send response message")]
+    Respond(#[cause] SyncFailure<TelegramError>),
 }

@@ -45,7 +45,13 @@ pub trait Action {
 #[derive(Debug, Fail)]
 pub enum Error {
     /// An error occurred while invoking an action.
-    // TODO: do not box?
-    #[fail(display = "failed to invoke action")]
-    Invoke(#[cause] Compat<FailureError>),
+    #[fail(display = "failed to invoke action: {}", name)]
+    Invoke {
+        /// The internal cause of the action error.
+        #[cause]
+        cause: Compat<FailureError>,
+
+        /// The name of the action.
+        name: String,
+    }
 }

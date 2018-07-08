@@ -1,10 +1,13 @@
-use failure::Error as FailureError;
-use futures::{
-    future::ok,
-    Future,
+use std::time::Duration;
+
+use failure::{
+    Error as FailureError,
+    SyncFailure,
 };
+use futures::Future;
 use telegram_bot::{
     Api,
+    Error as TelegramError,
     prelude::*,
     types::{Message, ParseMode},
 };
@@ -57,15 +60,28 @@ impl Action for Help {
         cmds.sort();
         let cmd_list = cmds.join("\n");
 
-        // Send the help message
-        api.spawn(
-            msg.text_reply(format!(
-                "*RISC commands:*\n{}",
-                cmd_list,
-            ))
-            .parse_mode(ParseMode::Markdown),
-        );
+        // Build a future for sending the response help message
+        // TODO: make this timeout configurable
+        let future = api.send_timeout(
+                msg.text_reply(format!(
+                        "*RISC commands:*\n{}",
+                        cmd_list,
+                    ))
+                    .parse_mode(ParseMode::Markdown),
+                Duration::from_secs(10),
+            )
+            .map(|_| ())
+            .map_err(|err| Error::Respond(SyncFailure::new(err)))
+            .from_err();
 
-        Box::new(ok(()))
+        Box::new(future)
     }
+}
+
+/// A help action error.
+#[derive(Debug, Fail)]
+pub enum Error {
+    /// An error occurred while sending a response message to the user.
+    #[fail(display = "failed to send response message")]
+    Respond(#[cause] SyncFailure<TelegramError>),
 }

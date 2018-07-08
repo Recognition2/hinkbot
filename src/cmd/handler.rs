@@ -45,11 +45,16 @@ impl Handler {
         let action = ACTIONS.iter()
             .find(|a| a.is_cmd(cmd));
         if let Some(action) = action {
-            Box::new(
-                action.invoke(&msg, api)
-                    .map_err(|err| ActionError::Invoke(err.compat()))
-                    .from_err()
-            )
+            // Build the action invocation future
+            let action_future = action
+                .invoke(&msg, api)
+                .map_err(move |err| ActionError::Invoke {
+                    cause: err.compat(),
+                    name: action.cmd().to_owned(),
+                })
+                .from_err();
+
+            Box::new(action_future)
         } else {
             Box::new(ok(()))
         }
