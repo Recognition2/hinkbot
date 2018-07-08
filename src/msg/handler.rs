@@ -39,6 +39,14 @@ impl Handler {
                 ref data,
                 ..
             } => {
+                // Log all incomming text messages
+                println!(
+                    "MSG <{}>@{}: {}",
+                    &message.from.first_name,
+                    &message.chat.id(),
+                    data,
+                );
+
                 // Route the message to the command handler, if it's a command
                 if let Some(cmd) = matches_cmd(data) {
                     return Box::new(

@@ -42,20 +42,6 @@ fn main() {
 
     // Build a future for handling all updates from Telegram
     let future = api.stream()
-        // Log text messages
-        .inspect(|update| {
-            if let UpdateKind::Message(message) = &update.kind {
-                if let MessageKind::Text {ref data, ..} = message.kind {
-                    println!(
-                        "MSG <{}>@{}: {}",
-                        &message.from.first_name,
-                        &message.chat.id(),
-                        data,
-                    );
-                }
-            }
-        })
-
         // Route new messages through the message handler, drop other updates
         .for_each(|update| {
             // Process messages
