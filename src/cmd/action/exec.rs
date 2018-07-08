@@ -407,7 +407,7 @@ pub enum Error {
     StatusMessage(#[cause] Compat<FailureError>),
 
     /// An error occurred while executing the user command.
-    #[fail(display = "failed to execute user command")]
+    #[fail(display = "failed to execute user shell command")]
     Execute(#[cause] ExecutorError),
 
     /// An error occurred while throttling status update messages.

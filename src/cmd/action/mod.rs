@@ -45,7 +45,8 @@ pub trait Action {
 #[derive(Debug, Fail)]
 pub enum Error {
     /// An error occurred while invoking an action.
-    #[fail(display = "failed to invoke action: {}", name)]
+    #[fail(display = "")]
+    //#[fail(display = "failed to invoke action: {}", name)]
     Invoke {
         /// The internal cause of the action error.
         #[cause]

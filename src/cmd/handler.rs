@@ -65,7 +65,7 @@ impl Handler {
 #[derive(Debug, Fail)]
 pub enum Error {
     /// An error occurred while handling a command.
-    #[fail(display = "failed to execute command")]
+    #[fail(display = "failed to invoke command")]
     Cmd(#[cause] ActionError),
 }
 
