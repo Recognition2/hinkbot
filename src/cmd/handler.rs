@@ -35,7 +35,7 @@ lazy_static! {
 
     /// A regex for matching messages that contain a command.
     static ref CMD_REGEX: Regex = Regex::new(
-        r"^/([a-zA-Z0-9_]+)(@[a-zA-Z0-9_]+)?(\s.*$|$)",
+        r"^/(?is)([A-Z0-9_]+)(@[A-Z0-9_]+)?(\s.*$|$)",
     ).expect("failed to compile CMD_REGEX");
 }
 
