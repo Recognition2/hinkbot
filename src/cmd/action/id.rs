@@ -5,15 +5,21 @@ use chrono::{
     NaiveDateTime,
     Utc,
 };
-use failure::Error as FailureError;
+use failure::{
+    Compat,
+    err_msg,
+    Error as FailureError,
+    SyncFailure,
+};
 use futures::{
-    future::ok,
+    future::{err, ok},
     Future,
 };
 use humansize::{FileSize, file_size_opts};
 use humantime::format_duration;
 use telegram_bot::{
     Api,
+    Error as TelegramError,
     prelude::*,
     types::{
         ChannelPost,
@@ -854,65 +860,78 @@ impl Action for Id {
         let msg = msg.clone();
         let api = api.clone();
 
-        // First send a temporary response, to claim an ID for the answer message
+        // Build a future to send a temporary response to claim an ID for the answer message
         // TODO: make this timeout configurable
         let response = api.send_timeout(
-            msg.text_reply("_Gathering facts..._")
-                .parse_mode(ParseMode::Markdown),
-            Duration::from_secs(10),
-        );
+                msg.text_reply("_Gathering facts..._")
+                    .parse_mode(ParseMode::Markdown),
+                Duration::from_secs(10),
+            )
+            .map_err(|err| -> FailureError { SyncFailure::new(err).into() })
+            .map_err(|err| Error::GatherFacts(err.compat()))
+            .and_then(|msg_answer| if let Some(msg_answer) = msg_answer {
+                ok(msg_answer)
+            } else {
+                err(Error::GatherFacts(err_msg(
+                    "failed to gather facts, got no message from Telegram API",
+                ).compat()))
+            });
 
         // Build the ID details message and update the answer
-        let response = response.and_then(move |msg_answer| {
-                if let Some(msg_answer) = msg_answer {
-                    // Build a list of info elements to print in the final message
-                    let mut info = Vec::new();
+        let response = response
+            .and_then(move |msg_answer| {
+                // Build a list of info elements to print in the final message
+                let mut info = Vec::new();
 
-                    // Information about the sender and his message
-                    info.push(Self::build_user_info(&msg.from, "You"));
-                    info.push(Self::build_msg_info(&msg, "Your message"));
+                // Information about the sender and his message
+                info.push(Self::build_user_info(&msg.from, "You"));
+                info.push(Self::build_msg_info(&msg, "Your message"));
 
-                    // Information about a quoted message by the sender
-                    if let Some(ref reply_to) = msg.reply_to_message {
-                        info.push(Self::build_msg_channel_post_info(reply_to, "Your quoted message"));
-                    }
+                // Information about a quoted message by the sender
+                if let Some(ref reply_to) = msg.reply_to_message {
+                    info.push(Self::build_msg_channel_post_info(reply_to, "Your quoted message"));
+                }
 
-                    // Information about the answer message and the chat
-                    info.push(Self::build_msg_info(&msg_answer, "This message"));
-                    info.push(Self::build_chat_info(&msg.chat, "This chat"));
+                // Information about the answer message and the chat
+                info.push(Self::build_msg_info(&msg_answer, "This message"));
+                info.push(Self::build_chat_info(&msg.chat, "This chat"));
 
-                    // Add information about the bot
-                    info.push(Self::build_user_info(&msg_answer.from, "Bot"));
+                // Add information about the bot
+                info.push(Self::build_user_info(&msg_answer.from, "Bot"));
 
-                    // Tell a user he may reply to an existing message
-                    if msg.reply_to_message.is_none() {
-                        info.push(String::from(
-                            "_Note: reply to an existing message with /id to show it's details._"
-                        ));
-                    }
+                // Tell a user he may reply to an existing message
+                if msg.reply_to_message.is_none() {
+                    info.push(String::from(
+                        "_Note: reply to an existing message with /id to show it's details._"
+                    ));
+                }
 
-                    // Send the help message
-                    api.spawn(
+                // Build a future to update the temporary message with the actual ID response
+                // TODO: make this timeout configurable
+                api.send_timeout(
                         msg_answer.edit_text(info.join("\n\n"))
                             .parse_mode(ParseMode::Markdown)
                             .disable_preview(),
-                    );
-                }
-
-                ok(())
+                        Duration::from_secs(10),
+                    )
+                    .map(|_| ())
+                    .map_err(|err| Error::Respond(SyncFailure::new(err)))
             })
-            .map_err(|_| Error::Undefined.into());
+            .from_err();
 
         Box::new(response)
     }
 }
 
-/// An action error.
-// TODO: add causes
+/// An ID action error.
 #[derive(Debug, Fail)]
 pub enum Error {
-    /// An error occurred while invoking an action.
-    // TODO: properly define errors
-    #[fail(display = "")]
-    Undefined,
+    /// An error occurred while sending the first temporary response to gather facts.
+    #[fail(display = "failed to send temporary response to gather ID facts")]
+    GatherFacts(#[cause] Compat<FailureError>),
+
+    /// An error occurred while sending the actual response by updating the temporary response
+    /// message that was used for gathering facts.
+    #[fail(display = "failed to update temporary response with actual ID details")]
+    Respond(#[cause] SyncFailure<TelegramError>),
 }
