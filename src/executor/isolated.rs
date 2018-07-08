@@ -2,16 +2,19 @@ use std::process::{Command, ExitStatus};
 
 use futures::Future;
 
-use super::normal;
+use super::{
+    Error,
+    normal,
+};
 
 /// Execute the given command in a secure isolated environment.
 ///
 /// `stdout` and `stderr` is streamed line by line to the `output` closure,
 /// which is called for each line that received.
 pub fn execute<O>(cmd: String, output: O)
-    -> Box<Future<Item = ExitStatus, Error = ()>>
+    -> Box<Future<Item = ExitStatus, Error = Error>>
     where
-        O: Fn(String) -> Result<(), ()> + Clone + 'static
+        O: Fn(String) -> Result<(), Error> + Clone + 'static
 {
     // Use Docker as base command
     let mut isolated_cmd = Command::new("docker");
@@ -20,6 +23,7 @@ pub fn execute<O>(cmd: String, output: O)
     // TODO: configurable timeout
     // TODO: also handle a timeout fallback outside the actual container
     // TODO: map container UIDs to something above 10k
+    // TODO: check what error pops up for users when docker is not found
     let isolated_cmd = isolated_cmd.arg("run")
         .arg("--rm")
         .args(&["--cpus", "0.2"])

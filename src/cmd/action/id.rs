@@ -873,7 +873,7 @@ impl Action for Id {
                 ok(msg_answer)
             } else {
                 err(Error::GatherFacts(err_msg(
-                    "failed to gather facts, got no message from Telegram API",
+                    "failed to gather facts, got empty response from Telegram API",
                 ).compat()))
             });
 

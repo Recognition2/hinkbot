@@ -5,7 +5,12 @@ use std::process::ExitStatus;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
-use failure::Error as FailureError;
+use failure::{
+    Compat,
+    err_msg,
+    Error as FailureError,
+    SyncFailure,
+};
 use futures::{
     future::{err, ok},
     Future,
@@ -13,13 +18,20 @@ use futures::{
 };
 use telegram_bot::{
     Api,
+    Error as TelegramError,
     prelude::*,
     types::{Message, MessageKind, ParseMode},
 };
 use self::htmlescape::encode_minimal;
-use self::tokio_timer::Interval;
+use self::tokio_timer::{
+    Error as TimerError,
+    Interval,
+};
 
-use executor::isolated;
+use executor::{
+    Error as ExecutorError,
+    isolated,
+};
 use super::Action;
 
 /// The action command name.
@@ -49,44 +61,46 @@ impl Exec {
         let exec_status = ExecStatus::create_status_msg(msg, api.clone());
 
         // Build a future for the command execution, and status updating
-        let exec = exec_status.and_then(move |status| {
-            // Create an mutexed arc for the status
-            let status = Arc::new(Mutex::new(status));
+        let exec = exec_status
+            .and_then(move |status| {
+                // Create an mutexed arc for the status
+                let status = Arc::new(Mutex::new(status));
 
-            // Execute the command in an isolated environment, process output and the exit code
-            let status_output = status.clone();
-            let status_exit = status.clone();
-            let cmd = isolated::execute(cmd, move |line| {
-                    // Append the line to the captured output
-                    status_output.lock().unwrap().append_line(&line);
-                    Ok(())
-                })
-                .and_then(move |status| {
-                    // Set the exit status
-                    status_exit.lock().unwrap().set_status(status);
-                    ok(())
-                });
+                // Execute the command in an isolated environment, process output and the exit code
+                let status_output = status.clone();
+                let status_exit = status.clone();
+                let cmd = isolated::execute(cmd, move |line| {
+                        // Append the line to the captured output
+                        status_output.lock().unwrap().append_line(&line);
+                        Ok(())
+                    })
+                    .and_then(move |status| {
+                        // Set the exit status
+                        status_exit.lock().unwrap().set_status(status);
+                        ok(())
+                    })
+                    .map_err(|err| Error::Execute(err));
 
-            // Set up an interval for constantly updating the status
-            let status_update = status.clone();
-            Interval::new(
-                    Instant::now() + Duration::from_millis(1000),
-                    Duration::from_millis(1000),
-                )
-                .for_each(move |_| {
-                    // Update the status on Telegram, throttled
-                    status_update.lock().unwrap().update_throttled();
-                    Ok(())
-                })
-                .map_err(|_| ())
-                .select(cmd)
-                .and_then(move |_| {
-                    // Update one final time, to ensure all status is sent to Telegram
-                    status.lock().unwrap().update();
-                    ok(())
-                })
-                .map_err(|_| Error::Undefined)
-        });
+                // Set up an interval for constantly updating the status
+                let status_update = status.clone();
+                Interval::new(
+                        Instant::now() + Duration::from_millis(1000),
+                        Duration::from_millis(1000),
+                    )
+                    .map_err(|err| Error::Throttle(err))
+                    .for_each(move |_| {
+                        // Update the status on Telegram, throttled
+                        status_update.lock().unwrap().update_throttled();
+                        Ok(())
+                    })
+                    .select(cmd)
+                    .map_err(|(err, _)| err)
+                    .and_then(move |_| {
+                        // Update one final time, to ensure all status is sent to Telegram
+                        status.lock().unwrap().update();
+                        ok(())
+                    })
+            });
 
         Box::new(exec)
     }
@@ -128,16 +142,22 @@ impl Action for Exec {
 
             // Provide the user with feedback if no command is entered
             if cmd.trim().is_empty() {
-                // TODO: return a future
-                api.spawn(
-                    msg.text_reply("\
-                        Please provide a command to run.\n\
-                        \n\
-                        For example:\n\
-                        `/exec echo Hello!`\
-                    ").parse_mode(ParseMode::Markdown),
-                );
-                return Box::new(ok(()));
+                // Build a future for sending the help message
+                // TODO: make this timeout configurable
+                let future = api.send_timeout(
+                        msg.text_reply("\
+                                Please provide a command to run.\n\
+                                \n\
+                                For example:\n\
+                                `/exec echo Hello!`\
+                            ").parse_mode(ParseMode::Markdown),
+                        Duration::from_secs(10),
+                    )
+                    .map(|_| ())
+                    .map_err(|err| Error::Help(SyncFailure::new(err)))
+                    .from_err();
+
+                return Box::new(future);
             }
 
             // Print the command to run
@@ -145,12 +165,11 @@ impl Action for Exec {
 
             // Execute the command, report back to the user
             return Box::new(
-                Self::exec_cmd(cmd, api, msg)
-                    .from_err(),
+                Self::exec_cmd(cmd, api, msg).from_err(),
             );
+        } else {
+            Box::new(ok(()))
         }
-
-        Box::new(ok(()))
     }
 }
 
@@ -199,15 +218,14 @@ impl ExecStatus {
                     .parse_mode(ParseMode::Html),
                 Duration::from_secs(10),
             )
-            .map_err(|err| println!("TELEGRAM ERROR: {:?}", err))
+            .map_err(|err| -> FailureError { SyncFailure::new(err).into() })
+            .map_err(|err| Error::StatusMessage(err.compat()))
             .and_then(|msg| if let Some(msg) = msg {
                 ok(ExecStatus::new(msg, api))
             } else {
-                err(())
-            })
-            .map_err(|_| {
-                println!("TELEGRAM ERROR: no message");
-                Error::Undefined
+                err(Error::StatusMessage(err_msg(
+                    "failed to send command status message, got empty response from Telegram API",
+                ).compat()))
             })
     }
 
@@ -332,6 +350,7 @@ impl ExecStatus {
 
     /// Update the status message in Telegram with the newest status data in this object.
     /// This method spawns a future that completes asynchronously.
+    // TODO: should we return a future for updating, to allow catching errors?
     pub fn update_status_msg(&mut self) {
         // Spawn a future to edit the status message with the newest build status text
         self.api.spawn(
@@ -375,12 +394,23 @@ impl ExecStatus {
     }
 }
 
-/// An action error.
-// TODO: add causes
+/// An exec action error.
 #[derive(Debug, Fail)]
 pub enum Error {
-    /// An error occurred while invoking an action.
-    // TODO: properly define errors
-    #[fail(display = "")]
-    Undefined,
+    /// An error occurred while sending the help message which is sent when no command input is
+    /// given.
+    #[fail(display = "failed to send help response message")]
+    Help(#[cause] SyncFailure<TelegramError>),
+
+    /// Failed to send the initial status message to update later on as the process continues.
+    #[fail(display = "failed to send command status message")]
+    StatusMessage(#[cause] Compat<FailureError>),
+
+    /// An error occurred while executing the user command.
+    #[fail(display = "failed to execute user command")]
+    Execute(#[cause] ExecutorError),
+
+    /// An error occurred while throttling status update messages.
+    #[fail(display = "failed to throttle status update messages")]
+    Throttle(#[cause] TimerError),
 }
