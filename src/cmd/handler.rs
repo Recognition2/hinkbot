@@ -7,7 +7,10 @@ use telegram_bot::{
     types::Message,
 };
 
-use super::action::Action;
+use super::action::{
+    Action,
+    Error as ActionError,
+};
 use super::action::exec::Exec;
 use super::action::help::Help;
 use super::action::id::Id;
@@ -42,17 +45,28 @@ impl Handler {
         let action = ACTIONS.iter()
             .find(|a| a.is_cmd(cmd));
         if let Some(action) = action {
-            Box::new(action.invoke(&msg, api).map_err(|_| Error::Cmd))
+            Box::new(
+                action.invoke(&msg, api)
+                    .map_err(|err| ActionError::Invoke(err.compat()))
+                    .from_err()
+            )
         } else {
             Box::new(ok(()))
         }
     }
 }
 
+/// A command handler error.
 #[derive(Debug, Fail)]
-// TODO: add causes
 pub enum Error {
     /// An error occurred while handling a command.
     #[fail(display = "failed to execute command")]
-    Cmd,
+    Cmd(#[cause] ActionError),
+}
+
+/// Convert command action errors to a command handler error.
+impl From<ActionError> for Error {
+    fn from(err: ActionError) -> Error {
+        Error::Cmd(err)
+    }
 }

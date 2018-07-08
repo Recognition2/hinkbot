@@ -5,6 +5,7 @@ use std::process::ExitStatus;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
+use failure::Error as FailureError;
 use futures::{
     future::{err, ok},
     Future,
@@ -41,7 +42,9 @@ impl Exec {
     ///
     /// Send a reply to the given user command `msg`
     /// and timely update it to show the status of the command that was executed.
-    pub fn exec_cmd<'a>(cmd: String, api: Api, msg: &Message) -> Box<Future<Item = (), Error = ()>> {
+    pub fn exec_cmd<'a>(cmd: String, api: Api, msg: &Message)
+        -> Box<Future<Item = (), Error = Error>>
+    {
         // Create the status message, and build the executable status object
         let exec_status = ExecStatus::create_status_msg(msg, api.clone());
 
@@ -82,7 +85,7 @@ impl Exec {
                     status.lock().unwrap().update();
                     ok(())
                 })
-                .map_err(|_| ())
+                .map_err(|_| Error::Undefined)
         });
 
         Box::new(exec)
@@ -103,7 +106,9 @@ impl Action for Exec {
     }
 
     // TODO: proper error handling everywhere, pass errors along
-    fn invoke(&self, msg: &Message, api: &Api) -> Box<Future<Item = (), Error = ()>> {
+    fn invoke(&self, msg: &Message, api: &Api)
+        -> Box<Future<Item = (), Error = FailureError>>
+    {
         if let MessageKind::Text {
             ref data,
             ..
@@ -139,7 +144,10 @@ impl Action for Exec {
             println!("CMD: {}", cmd);
 
             // Execute the command, report back to the user
-            return Self::exec_cmd(cmd, api, msg);
+            return Box::new(
+                Self::exec_cmd(cmd, api, msg)
+                    .from_err(),
+            );
         }
 
         Box::new(ok(()))
@@ -182,7 +190,7 @@ impl ExecStatus {
     /// Create a status output message as reply on the given `msg`,
     /// and return an `ExecStatus` for it.
     pub fn create_status_msg(msg: &Message, api: Api)
-        -> impl Future<Item = Self, Error = ()>
+        -> impl Future<Item = Self, Error = Error>
     {
         // TODO: make this timeout configurable
         // TODO: handle the Telegram errors properly
@@ -197,7 +205,10 @@ impl ExecStatus {
             } else {
                 err(())
             })
-            .map_err(|_| println!("TELEGRAM ERROR: no message"))
+            .map_err(|_| {
+                println!("TELEGRAM ERROR: no message");
+                Error::Undefined
+            })
     }
 
     /// Build a new exec status object with the given status message and Telegram API client
@@ -362,4 +373,14 @@ impl ExecStatus {
         // Update
         self.update()
     }
+}
+
+/// An action error.
+// TODO: add causes
+#[derive(Debug, Fail)]
+pub enum Error {
+    /// An error occurred while invoking an action.
+    // TODO: properly define errors
+    #[fail(display = "")]
+    Undefined,
 }

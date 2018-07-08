@@ -1,3 +1,4 @@
+use failure::Error as FailureError;
 use futures::{
     future::ok,
     Future,
@@ -41,7 +42,9 @@ impl Action for Help {
         HELP
     }
 
-    fn invoke(&self, msg: &Message, api: &Api) -> Box<Future<Item = (), Error = ()>> {
+    fn invoke(&self, msg: &Message, api: &Api)
+        -> Box<Future<Item = (), Error = FailureError>>
+    {
         // Build the command list
         let mut cmds: Vec<String> = ACTIONS.iter()
             .filter(|action| !action.hidden())

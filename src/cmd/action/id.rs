@@ -5,6 +5,7 @@ use chrono::{
     NaiveDateTime,
     Utc,
 };
+use failure::Error as FailureError;
 use futures::{
     future::ok,
     Future,
@@ -846,7 +847,9 @@ impl Action for Id {
         HELP
     }
 
-    fn invoke(&self, msg: &Message, api: &Api) -> Box<Future<Item = (), Error = ()>> {
+    fn invoke(&self, msg: &Message, api: &Api)
+        -> Box<Future<Item = (), Error = FailureError>>
+    {
         // Own the message and API
         let msg = msg.clone();
         let api = api.clone();
@@ -861,44 +864,55 @@ impl Action for Id {
 
         // Build the ID details message and update the answer
         let response = response.and_then(move |msg_answer| {
-            if let Some(msg_answer) = msg_answer {
-                // Build a list of info elements to print in the final message
-                let mut info = Vec::new();
+                if let Some(msg_answer) = msg_answer {
+                    // Build a list of info elements to print in the final message
+                    let mut info = Vec::new();
 
-                // Information about the sender and his message
-                info.push(Self::build_user_info(&msg.from, "You"));
-                info.push(Self::build_msg_info(&msg, "Your message"));
+                    // Information about the sender and his message
+                    info.push(Self::build_user_info(&msg.from, "You"));
+                    info.push(Self::build_msg_info(&msg, "Your message"));
 
-                // Information about a quoted message by the sender
-                if let Some(ref reply_to) = msg.reply_to_message {
-                    info.push(Self::build_msg_channel_post_info(reply_to, "Your quoted message"));
+                    // Information about a quoted message by the sender
+                    if let Some(ref reply_to) = msg.reply_to_message {
+                        info.push(Self::build_msg_channel_post_info(reply_to, "Your quoted message"));
+                    }
+
+                    // Information about the answer message and the chat
+                    info.push(Self::build_msg_info(&msg_answer, "This message"));
+                    info.push(Self::build_chat_info(&msg.chat, "This chat"));
+
+                    // Add information about the bot
+                    info.push(Self::build_user_info(&msg_answer.from, "Bot"));
+
+                    // Tell a user he may reply to an existing message
+                    if msg.reply_to_message.is_none() {
+                        info.push(String::from(
+                            "_Note: reply to an existing message with /id to show it's details._"
+                        ));
+                    }
+
+                    // Send the help message
+                    api.spawn(
+                        msg_answer.edit_text(info.join("\n\n"))
+                            .parse_mode(ParseMode::Markdown)
+                            .disable_preview(),
+                    );
                 }
 
-                // Information about the answer message and the chat
-                info.push(Self::build_msg_info(&msg_answer, "This message"));
-                info.push(Self::build_chat_info(&msg.chat, "This chat"));
-
-                // Add information about the bot
-                info.push(Self::build_user_info(&msg_answer.from, "Bot"));
-
-                // Tell a user he may reply to an existing message
-                if msg.reply_to_message.is_none() {
-                    info.push(String::from(
-                        "_Note: reply to an existing message with /id to show it's details._"
-                    ));
-                }
-
-                // Send the help message
-                api.spawn(
-                    msg_answer.edit_text(info.join("\n\n"))
-                        .parse_mode(ParseMode::Markdown)
-                        .disable_preview(),
-                );
-            }
-
-            ok(())
-        }).map_err(|_| ());
+                ok(())
+            })
+            .map_err(|_| Error::Undefined.into());
 
         Box::new(response)
     }
+}
+
+/// An action error.
+// TODO: add causes
+#[derive(Debug, Fail)]
+pub enum Error {
+    /// An error occurred while invoking an action.
+    // TODO: properly define errors
+    #[fail(display = "")]
+    Undefined,
 }

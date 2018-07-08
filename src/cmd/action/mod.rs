@@ -6,6 +6,10 @@ pub mod risc;
 pub mod start;
 pub mod test;
 
+use failure::{
+    Compat,
+    Error as FailureError,
+};
 use futures::Future;
 use telegram_bot::{
     Api,
@@ -34,5 +38,14 @@ pub trait Action {
 
     /// Invoke the action with the given context.
     fn invoke(&self, msg: &Message, api: &Api)
-        -> Box<Future<Item = (), Error = ()>>;
+        -> Box<Future<Item = (), Error = FailureError>>;
+}
+
+/// An action error.
+#[derive(Debug, Fail)]
+pub enum Error {
+    /// An error occurred while invoking an action.
+    // TODO: do not box?
+    #[fail(display = "failed to invoke action")]
+    Invoke(#[cause] Compat<FailureError>),
 }
