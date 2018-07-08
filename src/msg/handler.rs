@@ -5,7 +5,6 @@ use futures::{
     Future,
     future::ok,
 };
-use regex::Regex;
 use telegram_bot::{
     Api,
     Error as TelegramError,
@@ -16,13 +15,8 @@ use telegram_bot::{
 use cmd::handler::{
     Error as CmdHandlerError,
     Handler as CmdHandler,
+    matches_cmd,
 };
-
-lazy_static! {
-    /// A regex for matching messages that contain a command.
-    static ref CMD_REGEX: Regex = Regex::new(r"^/([a-zA-Z0-9_]+)(.*$|$)")
-        .expect("failed to compile CMD_REGEX");
-}
 
 /// The generic message handler.
 /// This handler should process all incomming messages from Telegram,
@@ -42,8 +36,8 @@ impl Handler {
                 // Log all incomming text messages
                 println!(
                     "MSG <{}>@{}: {}",
-                    &message.from.first_name,
-                    &message.chat.id(),
+                    &msg.from.first_name,
+                    &msg.chat.id(),
                     data,
                 );
 
@@ -85,18 +79,6 @@ impl Handler {
             )
             .map(|_| ())
             .map_err(|err| Error::HandlePrivate(SyncFailure::new(err)))
-    }
-}
-
-/// Test whehter the given message is recognized as a command.
-///
-/// The actual command name is returned if it is, `None` otherwise.
-// TODO: if a target bot is given with `/cmd@bot`, ensure it's username is matching
-fn matches_cmd(msg: &str) -> Option<&str> {
-    if let Some(groups) = CMD_REGEX.captures(msg.trim()) {
-        Some(groups.get(1).unwrap().as_str())
-    } else {
-        None
     }
 }
 

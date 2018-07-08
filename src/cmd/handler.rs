@@ -2,6 +2,7 @@ use futures::{
     Future,
     future::ok,
 };
+use regex::Regex;
 use telegram_bot::{
     Api,
     types::Message,
@@ -31,6 +32,11 @@ lazy_static! {
         Box::new(Start::new()),
         Box::new(Test::new()),
     ];
+
+    /// A regex for matching messages that contain a command.
+    static ref CMD_REGEX: Regex = Regex::new(
+        r"^/([a-zA-Z0-9_]+)(@[a-zA-Z0-9_]+)?(\s.*$|$)",
+    ).expect("failed to compile CMD_REGEX");
 }
 
 /// The command handler.
@@ -58,6 +64,18 @@ impl Handler {
         } else {
             Box::new(ok(()))
         }
+    }
+}
+
+/// Test whehter the given message is recognized as a command.
+///
+/// The actual command name is returned if it is, `None` otherwise.
+// TODO: if a target bot is given with `/cmd@bot`, ensure it's username is matching
+pub fn matches_cmd(msg: &str) -> Option<&str> {
+    if let Some(groups) = CMD_REGEX.captures(msg.trim()) {
+        Some(groups.get(1).unwrap().as_str())
+    } else {
+        None
     }
 }
 
