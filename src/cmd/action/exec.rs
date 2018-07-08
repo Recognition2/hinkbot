@@ -55,54 +55,51 @@ impl Exec {
     /// Send a reply to the given user command `msg`
     /// and timely update it to show the status of the command that was executed.
     pub fn exec_cmd<'a>(cmd: String, api: Api, msg: &Message)
-        -> Box<Future<Item = (), Error = Error>>
+        -> impl Future<Item = (), Error = Error>
     {
         // Create the status message, and build the executable status object
         let exec_status = ExecStatus::create_status_msg(msg, api.clone());
 
         // Build a future for the command execution, and status updating
-        let exec = exec_status
-            .and_then(move |status| {
-                // Create an mutexed arc for the status
-                let status = Arc::new(Mutex::new(status));
+        exec_status.and_then(move |status| {
+            // Create an mutexed arc for the status
+            let status = Arc::new(Mutex::new(status));
 
-                // Execute the command in an isolated environment, process output and the exit code
-                let status_output = status.clone();
-                let status_exit = status.clone();
-                let cmd = isolated::execute(cmd, move |line| {
-                        // Append the line to the captured output
-                        status_output.lock().unwrap().append_line(&line);
-                        Ok(())
-                    })
-                    .and_then(move |status| {
-                        // Set the exit status
-                        status_exit.lock().unwrap().set_status(status);
-                        ok(())
-                    })
-                    .map_err(|err| Error::Execute(err));
+            // Execute the command in an isolated environment, process output and the exit code
+            let status_output = status.clone();
+            let status_exit = status.clone();
+            let cmd = isolated::execute(cmd, move |line| {
+                    // Append the line to the captured output
+                    status_output.lock().unwrap().append_line(&line);
+                    Ok(())
+                })
+                .and_then(move |status| {
+                    // Set the exit status
+                    status_exit.lock().unwrap().set_status(status);
+                    ok(())
+                })
+                .map_err(|err| Error::Execute(err));
 
-                // Set up an interval for constantly updating the status
-                let status_update = status.clone();
-                Interval::new(
-                        Instant::now() + Duration::from_millis(1000),
-                        Duration::from_millis(1000),
-                    )
-                    .map_err(|err| Error::Throttle(err))
-                    .for_each(move |_| {
-                        // Update the status on Telegram, throttled
-                        status_update.lock().unwrap().update_throttled();
-                        Ok(())
-                    })
-                    .select(cmd)
-                    .map_err(|(err, _)| err)
-                    .and_then(move |_| {
-                        // Update one final time, to ensure all status is sent to Telegram
-                        status.lock().unwrap().update();
-                        ok(())
-                    })
-            });
-
-        Box::new(exec)
+            // Set up an interval for constantly updating the status
+            let status_update = status.clone();
+            Interval::new(
+                    Instant::now() + Duration::from_millis(1000),
+                    Duration::from_millis(1000),
+                )
+                .map_err(|err| Error::Throttle(err))
+                .for_each(move |_| {
+                    // Update the status on Telegram, throttled
+                    status_update.lock().unwrap().update_throttled();
+                    Ok(())
+                })
+                .select(cmd)
+                .map_err(|(err, _)| err)
+                .and_then(move |_| {
+                    // Update one final time, to ensure all status is sent to Telegram
+                    status.lock().unwrap().update();
+                    ok(())
+                })
+        })
     }
 }
 

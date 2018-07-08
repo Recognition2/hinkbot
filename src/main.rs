@@ -23,7 +23,10 @@ use futures::{
     Stream,
 };
 use tokio_core::reactor::Core;
-use telegram_bot::*;
+use telegram_bot::{
+    Api,
+    types::UpdateKind,
+};
 
 use msg::handler::Handler;
 use util::handle_msg_error;
@@ -52,16 +55,18 @@ fn main() {
 
                 // Build the message handling future, handle any errors
                 let msg_handler = Handler::handle(
-                    message.clone(),
-                    &api,
-                ).then(|result| {
-                    // Handle errors
-                    if let Err(err) = result {
-                        handle_msg_error(message, api, err);
-                    }
-
-                    ok(())
-                });
+                        message.clone(),
+                        &api,
+                    )
+                    .or_else(|err| handle_msg_error(message, api, err)
+                        .or_else(|err| {
+                            println!(
+                                "ERR: failed to handle error while handling message: {:?}",
+                                err,
+                            );
+                            ok(())
+                        })
+                    );
 
                 // Spawn the message handler future on the reactor
                 core_handle.spawn(msg_handler);

@@ -1,11 +1,14 @@
 extern crate colored;
 
 use std::borrow::Borrow;
+use std::time::Duration;
 
 use failure::Fail;
+use futures::Future;
 use self::colored::*;
 use telegram_bot::{
     Api,
+    Error as TelegramError,
     prelude::*,
     types::{Message, ParseMode},
 };
@@ -71,9 +74,14 @@ pub fn format_error<E: Fail>(err: impl Borrow<E>) -> String {
 /// Handle a message error, by sending the occurred error to the user as a reply on their
 /// message along with it's causes.
 // TODO: create a future for this, delay it for a second to cool down from throttling
-pub fn handle_msg_error<E: Fail>(msg: Message, api: Api, err: impl Borrow<E>) {
-    api.spawn(
-        msg.text_reply(format_error(err))
-            .parse_mode(ParseMode::Markdown),
-    )
+pub fn handle_msg_error<E: Fail>(msg: Message, api: Api, err: impl Borrow<E>)
+    -> impl Future<Item = (), Error = TelegramError>
+{
+    // TODO: make this timeout configurable
+    api.send_timeout(
+            msg.text_reply(format_error(err))
+                .parse_mode(ParseMode::Markdown),
+            Duration::from_secs(30),
+        )
+        .map(|_| ())
 }

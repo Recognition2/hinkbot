@@ -12,7 +12,7 @@ use super::{
 /// `stdout` and `stderr` is streamed line by line to the `output` closure,
 /// which is called for each line that received.
 pub fn execute<O>(cmd: String, output: O)
-    -> Box<Future<Item = ExitStatus, Error = Error>>
+    -> impl Future<Item = ExitStatus, Error = Error>
     where
         O: Fn(String) -> Result<(), Error> + Clone + 'static
 {
