@@ -331,9 +331,21 @@ impl ExecStatus {
             _ => String::new(),
         };
 
-        // Add a truncation notice
+        // Add some additional status labels to the notice if relevant
+        // TODO: improve this logic
+        let mut status_labels = Vec::new();
+        if !self.completed() && self.updated_count >= 10 {
+            status_labels.push("throttling");
+        }
         if truncated { 
-            notice += " (truncated)";
+            if self.completed() {
+                status_labels.push("truncated");
+            } else {
+                status_labels.push("truncating");
+            }
+        }
+        if !status_labels.is_empty() {
+            notice += &format!(" ({})", status_labels.join(", "));
         }
 
         // Format the output
