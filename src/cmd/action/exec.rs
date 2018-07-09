@@ -323,7 +323,7 @@ impl ExecStatus {
         let mut notice = match self.status {
             Some(status) if !status.success() =>
                 format!(
-                    "   Exit code <code>{}</code>",
+                    " Exit code <code>{}</code>",
                     status.code()
                         .map(|code| code.to_string())
                         .unwrap_or("?".into()),
@@ -334,7 +334,7 @@ impl ExecStatus {
         // Add some additional status labels to the notice if relevant
         // TODO: improve this logic
         let mut status_labels = Vec::new();
-        if !self.completed() && self.updated_count >= 9 {
+        if !self.completed() && self.updated_count >= 2 {
             status_labels.push("throttling");
         }
         if truncated { 
@@ -369,7 +369,7 @@ impl ExecStatus {
         format!("\
                 {}\n\
                 \n\
-                {}{}\
+                {}  {}\
             ",
             output,
             emoji,
@@ -411,23 +411,29 @@ impl ExecStatus {
     ///
     /// This method won't update if it was invoked too quickly before the last change.
     pub fn update_throttled(&mut self) {
-        // Determine what the throttle time is
-        let throttle_duration = if self.updated_count < 10 {
-            Duration::from_millis(950)
-        } else {
-            Duration::from_millis(4950)
-        };
-
         // Throttle
-        // TODO: make the throttle time configurable
         match self.changed_at.elapsed() {
-            Ok(elapsed) if elapsed < throttle_duration => return,
+            Ok(elapsed) if elapsed < self.throttle_duration() => return,
             Err(..) => return,
             _ => {},
         }
 
         // Update
         self.update()
+    }
+
+    /// The time to wait while throttling before sending the next update to Telegram.
+    /// The throttle time gradually increases the more messages updates are sent, to prevent
+    /// hitting the rate limit enforced by Telegram for sending message updates.
+    fn throttle_duration(&self) -> Duration {
+        // TODO: make the throttle time configurable
+        if self.updated_count < 3 {
+            Duration::from_millis(950)
+        } else if self.updated_count < 10 {
+            Duration::from_millis(2450)
+        } else {
+            Duration::from_millis(4950)
+        }
     }
 }
 
