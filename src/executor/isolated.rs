@@ -23,7 +23,6 @@ pub fn execute<O>(cmd: String, output: O)
     // TODO: configurable timeout
     // TODO: also handle a timeout fallback outside the actual container
     // TODO: map container UIDs to something above 10k
-    // TODO: check what error pops up for users when docker is not found
     let isolated_cmd = isolated_cmd.arg("run")
         .arg("--rm")
         .args(&["--cpus", "0.2"])

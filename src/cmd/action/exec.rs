@@ -194,6 +194,9 @@ pub struct ExecStatus {
     /// This is used to manage throttling.
     changed_at: SystemTime,
 
+    /// The number of times the status message in Telegram was updated.
+    updated_count: usize,
+
     /// An Telegram API client to update the status message with.
     api: Api,
 
@@ -234,6 +237,7 @@ impl ExecStatus {
             status: None,
             changed: false,
             changed_at: SystemTime::now(),
+            updated_count: 0,
             api,
             status_msg,
         }
@@ -243,6 +247,7 @@ impl ExecStatus {
     /// Note that if the output is getting too large, parts will be truncated.
     /// To append a line, use `append_line()` instead.
     pub fn append(&mut self, output: &str) {
+        // TODO: define a constant for this, and a method to check if truncated
         let truncate_at = 4096 - 100;
 
         // Do not append if the output became too large
@@ -253,10 +258,10 @@ impl ExecStatus {
         // Append the output
         self.output += output;
 
-        // Truncate the output if it became too big
+        // Truncate the beginning of the output if it became too big
         if self.output.len() >= truncate_at {
-            self.output.truncate(truncate_at);
-            self.output += " [truncated]";
+            let truncate_at = self.output.len() - truncate_at;
+            self.output = self.output.split_off(truncate_at);
         }
 
         // If anything is appended, we've changed
@@ -309,8 +314,13 @@ impl ExecStatus {
             "❌"
         };
 
+        // Detemrine whether we've truncated
+        // TODO: define a constant for this, and a method to check if truncated
+        let truncate_at = 4096 - 100;
+        let truncated = self.output.len() >= truncate_at;
+
         // Deterime whether to print a special notice
-        let notice = match self.status {
+        let mut notice = match self.status {
             Some(status) if !status.success() =>
                 format!(
                     "   Exit code <code>{}</code>",
@@ -321,14 +331,24 @@ impl ExecStatus {
             _ => String::new(),
         };
 
+        // Add a truncation notice
+        if truncated { 
+            notice += " (truncated)";
+        }
+
         // Format the output
         let output = if self.output.is_empty() {
             "<i>No output</i>".to_owned()
         } else {
             format!("\
                     <b>Output:</b>\n\
-                    <code>{}</code>\
+                    <code>{}{}</code>\
                 ",
+                if truncated {
+                    "[truncated] "
+                } else {
+                    ""
+                },
                 encode_minimal(&self.output),
             )
         };
@@ -358,6 +378,7 @@ impl ExecStatus {
 
         // Reset the changed status
         self.changed = false;
+        self.updated_count += 1;
         self.changed_at = SystemTime::now();
     }
 
@@ -378,10 +399,17 @@ impl ExecStatus {
     ///
     /// This method won't update if it was invoked too quickly before the last change.
     pub fn update_throttled(&mut self) {
+        // Determine what the throttle time is
+        let throttle_duration = if self.updated_count < 10 {
+            Duration::from_millis(950)
+        } else {
+            Duration::from_millis(4950)
+        };
+
         // Throttle
         // TODO: make the throttle time configurable
         match self.changed_at.elapsed() {
-            Ok(elapsed) if elapsed < Duration::from_millis(900) => return,
+            Ok(elapsed) if elapsed < throttle_duration => return,
             Err(..) => return,
             _ => {},
         }
