@@ -334,7 +334,7 @@ impl ExecStatus {
         // Add some additional status labels to the notice if relevant
         // TODO: improve this logic
         let mut status_labels = Vec::new();
-        if !self.completed() && self.updated_count >= 10 {
+        if !self.completed() && self.updated_count >= 9 {
             status_labels.push("throttling");
         }
         if truncated { 
