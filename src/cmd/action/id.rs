@@ -54,7 +54,8 @@ impl Id {
     /// Build the info part for the given user.
     pub fn build_user_info(user: &User, caption: &str) -> String {
         // Build the header, add the ID
-        let mut info = format!("\
+        let mut info = format!(
+            "\
                 *{}:*\n\
                 ID: `{}`\
             ",
@@ -72,7 +73,8 @@ impl Id {
 
         // Append the name
         if let Some(ref last_name) = user.last_name {
-            info += &format!("\n\
+            info += &format!(
+                "\n\
                     First name: _{}_\n\
                     Last name: _{}_\
                 ",
@@ -93,7 +95,8 @@ impl Id {
     // TODO: the `build_channel_post_info` message is similar, merge them
     pub fn build_msg_info(msg: &Message, caption: &str) -> String {
         // Build the main info
-        let mut info = format!("\
+        let mut info = format!(
+            "\
                 *{}:*\n\
                 ID: `{}`\n\
                 Poster ID: `{}`\n\
@@ -125,7 +128,8 @@ impl Id {
 
         // Append forwarder information if availalbe
         if let Some(ref forward) = msg.forward {
-            info += &format!("\n\
+            info += &format!(
+                "\n\
                     Forwarded: _yes_\n\
                     Original date: _{}_\
                 ",
@@ -143,7 +147,8 @@ impl Id {
                 ForwardFrom::Channel {
                         channel,
                         message_id,
-                    } => format!("\n\
+                    } => format!(
+                        "\n\
                             Original message ID: `{}`\n\
                             Original channel ID: `{}`\
                         ",
@@ -159,7 +164,8 @@ impl Id {
     /// Build the info part for the given channel post.
     pub fn build_channel_post_info(msg: &ChannelPost, caption: &str) -> String {
         // Build the main info
-        let mut info = format!("\
+        let mut info = format!(
+            "\
                 *{}:*\n\
                 ID: `{}`\n\
                 Channel ID: `{}`\n\
@@ -191,7 +197,8 @@ impl Id {
 
         // Append forwarder information if availalbe
         if let Some(ref forward) = msg.forward {
-            info += &format!("\n\
+            info += &format!(
+                "\n\
                     Forwarded: _yes_\n\
                     Original date: _{}_\
                 ",
@@ -242,13 +249,15 @@ impl Id {
 
         // Add details
         info += &match chat {
-            MessageChat::Private(user) => format!("\n\
+            MessageChat::Private(user) => format!(
+                "\n\
                     Type: `private`\n\
                     Other user ID: `{}`\
                 ",
                 user.id,
             ),
-            MessageChat::Group(group) => format!("\n\
+            MessageChat::Group(group) => format!(
+                "\n\
                     Type: `group`\n\
                     Group ID: `{}`\n\
                     Title: _{}_\
@@ -256,7 +265,8 @@ impl Id {
                 group.id,
                 group.title,
             ),
-            MessageChat::Supergroup(group) => format!("\n\
+            MessageChat::Supergroup(group) => format!(
+                "\n\
                     Type: `supergroup`\n\
                     Group ID: `{}`\n\
                     Title: _{}_\
@@ -295,7 +305,8 @@ impl Id {
                 data,
             } => {
                 // Build generic info
-                let mut info = format!("\
+                let mut info = format!(
+                    "\
                         Kind: `audio`\n\
                         Audio file ID: `{}`\n\
                         Audio length: _{}_\
@@ -343,7 +354,8 @@ impl Id {
                 caption,
             } => {
                 // Build generic info
-                let mut info = format!("\
+                let mut info = format!(
+                    "\
                         Kind: `document`\n\
                         Document file ID: `{}`\
                     ",
@@ -352,7 +364,8 @@ impl Id {
 
                 // Append the thumbnail information
                 if let Some(ref thumb) = data.thumb {
-                    info += &format!("\n\
+                    info += &format!(
+                        "\n\
                             Document thumb file ID: `{}`\n\
                             Document pixels: _{}x{}_\
                         ",
@@ -410,7 +423,8 @@ impl Id {
                 media_group_id,
             } => {
                 // Build generic info
-                let mut info = format!("\
+                let mut info = format!(
+                    "\
                         Kind: `photo`\n\
                         Photos: `{}`\
                     ",

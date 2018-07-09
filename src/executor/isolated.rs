@@ -37,7 +37,7 @@ pub fn execute<O>(cmd: String, output: O)
         .args(&["--restart", "no"])
         .args(&["--stop-timeout", "1"])
         .arg("risc-exec")
-        .args(&["timeout", "--signal=SIGTERM", "--kill-after=65", "60"])
+        .args(&["timeout", "--signal=SIGTERM", "--kill-after=305", "300"])
         .args(&["bash", "-c", &cmd]);
 
     // Execute the isolated command in the normal environment
