@@ -498,14 +498,15 @@ impl ExecStatus {
     fn format_duration(&self) -> Option<String> {
         match self.completion_duration {
             Some(duration) if duration.as_secs() >= 1 =>
-                Some(format!("took {}", format_duration(
-                    Duration::from_secs(duration.as_secs())
-                ))),
+                Some(
+                    format_duration(
+                        Duration::from_secs(duration.as_secs())
+                    ).to_string()
+                ),
             Some(duration) =>
-                Some(format!(
-                    "took {}",
-                    format_duration(duration).to_string().splitn(2, ' ').next().unwrap(),
-                )),
+                Some(
+                    format_duration(duration).to_string().splitn(2, ' ').next().unwrap().into()
+                ),
             None => None,
         }
     }
