@@ -43,6 +43,9 @@ const HIDDEN: bool = false;
 /// The action help.
 const HELP: &'static str = "Execute a shell command";
 
+/// The number of characters to truncate the output log at.
+const OUTPUT_TRUNCATE: usize = 4096 - 100;
+
 pub struct Exec;
 
 impl Exec {
@@ -247,20 +250,12 @@ impl ExecStatus {
     /// Note that if the output is getting too large, parts will be truncated.
     /// To append a line, use `append_line()` instead.
     pub fn append(&mut self, output: &str) {
-        // TODO: define a constant for this, and a method to check if truncated
-        let truncate_at = 4096 - 100;
-
-        // Do not append if the output became too large
-        if self.output.len() > truncate_at {
-            return;
-        }
-
         // Append the output
         self.output += output;
 
         // Truncate the beginning of the output if it became too big
-        if self.output.len() >= truncate_at {
-            let truncate_at = self.output.len() - truncate_at;
+        if self.is_truncating() {
+            let truncate_at = self.output.len() - OUTPUT_TRUNCATE;
             self.output = self.output.split_off(truncate_at);
         }
 
@@ -268,6 +263,11 @@ impl ExecStatus {
         if !output.is_empty() {
             self.changed = true;
         }
+    }
+
+    /// Check whether the output is being truncated because it became too large.
+    fn is_truncating(&self) -> bool {
+        self.output.len() >= OUTPUT_TRUNCATE
     }
 
     /// Append the given `line` to the output.
@@ -314,11 +314,6 @@ impl ExecStatus {
             "❌"
         };
 
-        // Detemrine whether we've truncated
-        // TODO: define a constant for this, and a method to check if truncated
-        let truncate_at = 4096 - 100;
-        let truncated = self.output.len() >= truncate_at;
-
         // Deterime whether to print a special notice
         let mut notice = match self.status {
             Some(status) if !status.success() =>
@@ -332,16 +327,15 @@ impl ExecStatus {
         };
 
         // Add some additional status labels to the notice if relevant
-        // TODO: improve this logic
         let mut status_labels = Vec::new();
-        if !self.completed() && self.updated_count >= 2 {
-            status_labels.push("throttling");
+        if !self.completed() && self.is_throttling(1) {
+            status_labels.push(format!("throttling {}s", self.throttle_secs(1)));
         }
-        if truncated { 
+        if self.is_truncating() { 
             if self.completed() {
-                status_labels.push("truncated");
+                status_labels.push("truncated".into());
             } else {
-                status_labels.push("truncating");
+                status_labels.push("truncating".into());
             }
         }
         if !status_labels.is_empty() {
@@ -356,7 +350,7 @@ impl ExecStatus {
                     <b>Output:</b>\n\
                     <code>{}{}</code>\
                 ",
-                if truncated {
+                if self.is_truncating() {
                     "[truncated] "
                 } else {
                     ""
@@ -422,18 +416,39 @@ impl ExecStatus {
         self.update()
     }
 
+    /// Check whehter we're throttling output.
+    ///
+    /// An update count offset may be given.
+    fn is_throttling(&self, offset: i64) -> bool {
+        self.throttle_secs(offset) > 1
+    }
+
+    /// The time to wait in seconds while throttling before sending the next update to Telegram.
+    /// The throttle time gradually increases the more messages updates are sent, to prevent
+    /// hitting the rate limit enforced by Telegram for sending message updates.
+    ///
+    /// An update count offset may be given.
+    fn throttle_secs(&self, offset: i64) -> u64 {
+        // Get the update count
+        let count = self.updated_count as i64 + offset;
+
+        // TODO: make the throttle time configurable
+        if count < 2 {
+            1
+        } else if count < 5 {
+            3
+        } else if count < 8 {
+            5
+        } else {
+            10
+        }
+    }
+
     /// The time to wait while throttling before sending the next update to Telegram.
     /// The throttle time gradually increases the more messages updates are sent, to prevent
     /// hitting the rate limit enforced by Telegram for sending message updates.
     fn throttle_duration(&self) -> Duration {
-        // TODO: make the throttle time configurable
-        if self.updated_count < 3 {
-            Duration::from_millis(950)
-        } else if self.updated_count < 10 {
-            Duration::from_millis(2450)
-        } else {
-            Duration::from_millis(4950)
-        }
+        Duration::from_secs(self.throttle_secs(0)) - Duration::from_millis(50)
     }
 }
 
