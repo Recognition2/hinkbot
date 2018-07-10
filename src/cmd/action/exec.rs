@@ -16,6 +16,7 @@ use futures::{
     Future,
     Stream,
 };
+use humantime::format_duration;
 use telegram_bot::{
     Api,
     Error as TelegramError,
@@ -44,7 +45,13 @@ const HIDDEN: bool = false;
 const HELP: &'static str = "Execute a shell command";
 
 /// The number of characters to truncate the output log at.
-const OUTPUT_TRUNCATE: usize = 4096 - 100;
+const OUTPUT_TRUNCATE: usize = 4096 - 150;
+
+/// The timeout duration for commands being executed.
+const EXEC_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// The worst precision of the timeout duration for the commands being executed.
+const EXEC_TIMEOUT_PRECISION: Duration = Duration::from_secs(1);
 
 pub struct Exec;
 
@@ -187,6 +194,12 @@ pub struct ExecStatus {
     /// The status code itself defines whether the execution was successful.
     status: Option<ExitStatus>,
 
+    /// The time the command started running at.
+    started_at: SystemTime,
+
+    /// The duration it took to complete executing the command.
+    completion_duration: Option<Duration>,
+
     /// True if the output or status has changed since the last status message update.
     /// If true, this means that the status message doesn't represent the current status corretly,
     /// and thus it should be updated.
@@ -238,6 +251,8 @@ impl ExecStatus {
         ExecStatus {
             output: String::new(),
             status: None,
+            started_at:SystemTime::now(),
+            completion_duration: None,
             changed: false,
             changed_at: SystemTime::now(),
             updated_count: 0,
@@ -254,7 +269,7 @@ impl ExecStatus {
         self.output += output;
 
         // Truncate the beginning of the output if it became too big
-        if self.is_truncating() {
+        if self.truncating() {
             let truncate_at = self.output.len() - OUTPUT_TRUNCATE;
             self.output = self.output.split_off(truncate_at);
         }
@@ -266,7 +281,7 @@ impl ExecStatus {
     }
 
     /// Check whether the output is being truncated because it became too large.
-    fn is_truncating(&self) -> bool {
+    fn truncating(&self) -> bool {
         self.output.len() >= OUTPUT_TRUNCATE
     }
 
@@ -287,8 +302,9 @@ impl ExecStatus {
             self.changed = true;
         }
 
-        // Update the status
+        // Update the status, and set the completion time
         self.status = Some(status);
+        self.completion_duration = self.started_at.elapsed().ok();
     }
 
     /// Check whether this executable has completed.
@@ -328,10 +344,16 @@ impl ExecStatus {
 
         // Add some additional status labels to the notice if relevant
         let mut status_labels = Vec::new();
-        if !self.completed() && self.is_throttling(1) {
+        if !self.completed() && self.throttling(1) {
             status_labels.push(format!("throttling {}s", self.throttle_secs(1)));
         }
-        if self.is_truncating() { 
+        if self.timed_out() {
+            status_labels.push("timed out".into());
+        }
+        if self.completed() && self.completion_duration.is_some() {
+            status_labels.push(format!("took {}", self.format_duration().unwrap_or("?".into())));
+        }
+        if self.truncating() {
             if self.completed() {
                 status_labels.push("truncated".into());
             } else {
@@ -350,7 +372,7 @@ impl ExecStatus {
                     <b>Output:</b>\n\
                     <code>{}{}</code>\
                 ",
-                if self.is_truncating() {
+                if self.truncating() {
                     "[truncated] "
                 } else {
                     ""
@@ -419,7 +441,7 @@ impl ExecStatus {
     /// Check whehter we're throttling output.
     ///
     /// An update count offset may be given.
-    fn is_throttling(&self, offset: i64) -> bool {
+    fn throttling(&self, offset: i64) -> bool {
         self.throttle_secs(offset) > 1
     }
 
@@ -449,6 +471,43 @@ impl ExecStatus {
     /// hitting the rate limit enforced by Telegram for sending message updates.
     fn throttle_duration(&self) -> Duration {
         Duration::from_secs(self.throttle_secs(0)) - Duration::from_millis(50)
+    }
+
+    /// Check if the user command timed out.
+    /// If the command hasn't completed yet, `false` is returned.
+    fn timed_out(&self) -> bool {
+        // We must have a status code of 124
+        match self.status {
+            Some(status) if status.code() == Some(124) => {},
+            _ => return false,
+        }
+
+        // If a duration is known, it must reach the timeout time
+        match self.completion_duration {
+            Some(duration) if duration >= EXEC_TIMEOUT - EXEC_TIMEOUT_PRECISION => {},
+            Some(_) => return false,
+            _ => {},
+        }
+
+        // The conditions for being timed out have been met
+        true
+    }
+
+    /// Format the completion duration, if known, into a human readable format.
+    /// If the completion time is not known, `None` is returned.
+    fn format_duration(&self) -> Option<String> {
+        match self.completion_duration {
+            Some(duration) if duration.as_secs() >= 1 =>
+                Some(format!("took {}", format_duration(
+                    Duration::from_secs(duration.as_secs())
+                ))),
+            Some(duration) =>
+                Some(format!(
+                    "took {}",
+                    format_duration(duration).to_string().splitn(2, ' ').next().unwrap(),
+                )),
+            None => None,
+        }
     }
 }
 
