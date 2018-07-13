@@ -15,7 +15,7 @@ use telegram_bot::{
 use super::Action;
 
 /// The action command name.
-const CMD: &'static str = "breakpoint";
+const CMD: &'static str = "start";
 
 /// Whether the action is hidden.
 const HIDDEN: bool = true;
@@ -50,8 +50,11 @@ impl Action for Start {
         // Build a future for sending the response start message
         let future = api.send_timeout(
                 msg.text_reply(format!("\
-                            LEKKER DEBUGGEN\
+                            *Welcome {}!*\n\
+                            \n\
+                            To start using this bot, see the list of available commands by sending /help\
                         ",
+                        msg.from.first_name,
                     ))
                     .parse_mode(ParseMode::Markdown),
                 Duration::from_secs(10),
