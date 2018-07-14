@@ -41,6 +41,9 @@ impl Handler {
                     data,
                 );
 
+                // Update the message stats
+                state.stats().increase_messages(msg.chat.id(), msg.from.id);
+
                 // Route the message to the command handler, if it's a command
                 if let Some(cmd) = matches_cmd(data) {
                     return Box::new(

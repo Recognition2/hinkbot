@@ -8,6 +8,8 @@ use diesel::{
 use telegram_bot::Api;
 use tokio_core::reactor::Handle;
 
+use stats::Stats;
+
 /// The global application state.
 #[derive(Clone)]
 pub struct State {
@@ -29,21 +31,8 @@ impl State {
     pub fn init(reactor: Handle) -> State {
         State {
             telegram_client: Self::create_telegram_client(reactor),
-            inner: Rc::new(StateInner {
-                db: Self::create_database(),
-            }),
+            inner: Rc::new(StateInner::init()),
         }
-    }
-
-    /// Create a MySQL connection to the database.
-    fn create_database() -> MysqlConnection {
-        // Retrieve the database connection URL
-        let database_url = env::var("DATABASE_URL")
-            .expect("env var DATABASE_URL not set");
-
-        // Connect to the database
-        MysqlConnection::establish(&database_url)
-            .expect(&format!("Failed to connect to database on {}", database_url))
     }
 
     /// Create a Telegram API client instance, and initiate a connection.
@@ -67,10 +56,42 @@ impl State {
     pub fn telegram_client(&self) -> &Api {
         &self.telegram_client
     }
+
+    /// Get the stats manager.
+    pub fn stats(&self) -> &Stats {
+        &self.inner.stats
+    }
 }
 
 /// The inner state.
 struct StateInner {
     /// The database connection.
     db: MysqlConnection,
+
+    /// The stats manager.
+    stats: Stats,
+}
+
+impl StateInner {
+    /// Initialize.
+    ///
+    /// This initializes the inner state.
+    /// Internally this connects to the bot database.
+    pub fn init() -> StateInner {
+        StateInner {
+            db: Self::create_database(),
+            stats: Stats::new(),
+        }
+    }
+
+    /// Create a MySQL connection to the database.
+    fn create_database() -> MysqlConnection {
+        // Retrieve the database connection URL
+        let database_url = env::var("DATABASE_URL")
+            .expect("env var DATABASE_URL not set");
+
+        // Connect to the database
+        MysqlConnection::establish(&database_url)
+            .expect(&format!("Failed to connect to database on {}", database_url))
+    }
 }

@@ -20,6 +20,7 @@ mod models;
 mod msg;
 mod schema;
 mod state;
+mod stats;
 mod util;
 
 use dotenv::dotenv;
