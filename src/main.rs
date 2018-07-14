@@ -1,5 +1,8 @@
 extern crate chrono;
 #[macro_use]
+extern crate diesel;
+extern crate dotenv;
+#[macro_use]
 extern crate failure;
 extern crate futures;
 extern crate humansize;
@@ -13,10 +16,18 @@ extern crate tokio_core;
 mod app;
 mod cmd;
 mod executor;
+mod models;
 mod msg;
+mod schema;
 mod util;
 
 use std::env; 
+
+use diesel::{
+    prelude::*,
+    mysql::MysqlConnection,
+};
+use dotenv::dotenv;
 use futures::{
     Future,
     future::ok,
@@ -32,13 +43,24 @@ use msg::handler::Handler;
 use util::handle_msg_error;
 
 fn main() {
+    // Load the environment variables file
+    dotenv().ok();
+
     // Build a future reactor
     let mut core = Core::new().unwrap();
     let core_handle = core.handle();
 
-    // Retrieve the Telegram bot token, initiate the API client
+    // Retieve environment variables
     let token = env::var("TELEGRAM_BOT_TOKEN")
         .expect("env var TELEGRAM_BOT_TOKEN not set");
+    let database_url = env::var("DATABASE_URL")
+        .expect("env var DATABASE_URL not set");
+
+    // Connect to the database
+    let db = MysqlConnection::establish(&database_url)
+        .expect(&format!("Failed to connect to database on {}", database_url));
+
+    // Initiate the Telegram API client
     let api = Api::configure(token)
         .build(core.handle())
         .unwrap();
