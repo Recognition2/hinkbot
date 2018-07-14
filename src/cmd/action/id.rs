@@ -18,7 +18,6 @@ use futures::{
 use humansize::{FileSize, file_size_opts};
 use humantime::format_duration;
 use telegram_bot::{
-    Api,
     Error as TelegramError,
     prelude::*,
     types::{
@@ -33,6 +32,7 @@ use telegram_bot::{
     },
 };
 
+use state::State;
 use super::Action;
 
 /// The action command name.
@@ -867,16 +867,17 @@ impl Action for Id {
         HELP
     }
 
-    fn invoke(&self, msg: &Message, api: &Api)
+    fn invoke(&self, state: &State, msg: &Message)
         -> Box<Future<Item = (), Error = FailureError>>
     {
-        // Own the message and API
+        // Own the message and global state
         let msg = msg.clone();
-        let api = api.clone();
+        let state = state.clone();
 
         // Build a future to send a temporary response to claim an ID for the answer message
         // TODO: make this timeout configurable
-        let response = api.send_timeout(
+        let response = state.telegram_client()
+            .send_timeout(
                 msg.text_reply("_Gathering facts..._")
                     .parse_mode(ParseMode::Markdown),
                 Duration::from_secs(10),
@@ -922,7 +923,8 @@ impl Action for Id {
 
                 // Build a future to update the temporary message with the actual ID response
                 // TODO: make this timeout configurable
-                api.send_timeout(
+                state.telegram_client()
+                    .send_timeout(
                         msg_answer.edit_text(info.join("\n\n"))
                             .parse_mode(ParseMode::Markdown)
                             .disable_preview(),

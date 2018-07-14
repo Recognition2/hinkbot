@@ -6,12 +6,12 @@ use failure::{
 };
 use futures::Future;
 use telegram_bot::{
-    Api,
     Error as TelegramError,
     prelude::*,
     types::{Message, ParseMode},
 };
 
+use state::State;
 use super::Action;
 use super::super::handler::ACTIONS;
 
@@ -45,7 +45,7 @@ impl Action for Help {
         HELP
     }
 
-    fn invoke(&self, msg: &Message, api: &Api)
+    fn invoke(&self, state: &State, msg: &Message)
         -> Box<Future<Item = (), Error = FailureError>>
     {
         // Build the command list
@@ -62,7 +62,8 @@ impl Action for Help {
 
         // Build a future for sending the response help message
         // TODO: make this timeout configurable
-        let future = api.send_timeout(
+        let future = state.telegram_client()
+            .send_timeout(
                 msg.text_reply(format!(
                         "*RISC commands:*\n{}",
                         cmd_list,

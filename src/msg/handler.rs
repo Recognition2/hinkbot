@@ -6,7 +6,6 @@ use futures::{
     future::ok,
 };
 use telegram_bot::{
-    Api,
     Error as TelegramError,
     prelude::*,
     types::{Message, MessageChat, MessageKind, ParseMode},
@@ -17,6 +16,7 @@ use cmd::handler::{
     Handler as CmdHandler,
     matches_cmd,
 };
+use state::State;
 
 /// The generic message handler.
 /// This handler should process all incomming messages from Telegram,
@@ -25,7 +25,7 @@ pub struct Handler;
 
 impl Handler {
     /// Handle the given message.
-    pub fn handle(msg: Message, api: &Api)
+    pub fn handle(state: &State, msg: Message)
         -> Box<Future<Item = (), Error = Error>>
     {
         match &msg.kind {
@@ -44,7 +44,7 @@ impl Handler {
                 // Route the message to the command handler, if it's a command
                 if let Some(cmd) = matches_cmd(data) {
                     return Box::new(
-                        CmdHandler::handle(cmd, msg.clone(), api).from_err(),
+                        CmdHandler::handle(state, cmd, msg.clone()).from_err(),
                     );
                 }
 
@@ -52,7 +52,7 @@ impl Handler {
                 match &msg.chat {
                     MessageChat::Private(..) =>
                         return Box::new(
-                            Self::handle_private(&msg, api),
+                            Self::handle_private(state, &msg),
                         ),
                     _ => {},
                 }
@@ -64,12 +64,13 @@ impl Handler {
     }
 
     /// Handle the give private/direct message.
-    pub fn handle_private(msg: &Message, api: &Api)
+    pub fn handle_private(state: &State, msg: &Message)
         -> impl Future<Item = (), Error = Error>
     {
         // Send a message to the user
         // TODO: make timeout configurable
-        api.send_timeout(
+        state.telegram_client()
+            .send_timeout(
                 msg.text_reply(format!(
                         "`BLEEP BLOOP`\n`I AM A BOT`\n\n{}, direct messages are not supported yet.",
                         msg.from.first_name,

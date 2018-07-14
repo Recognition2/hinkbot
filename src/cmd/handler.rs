@@ -3,11 +3,9 @@ use futures::{
     future::ok,
 };
 use regex::Regex;
-use telegram_bot::{
-    Api,
-    types::Message,
-};
+use telegram_bot::types::Message;
 
+use state::State;
 use super::action::{
     Action,
     Error as ActionError,
@@ -44,7 +42,7 @@ pub struct Handler;
 
 impl Handler {
     /// Handle the given command.
-    pub fn handle(cmd: &str, msg: Message, api: &Api)
+    pub fn handle(state: &State, cmd: &str, msg: Message)
         -> Box<Future<Item = (), Error = Error>>
     {
         // Invoke the proper action
@@ -53,7 +51,7 @@ impl Handler {
         if let Some(action) = action {
             // Build the action invocation future
             let action_future = action
-                .invoke(&msg, api)
+                .invoke(&state, &msg)
                 .map_err(move |err| ActionError::Invoke {
                     cause: err.compat(),
                     name: action.cmd().to_owned(),

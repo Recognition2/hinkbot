@@ -6,12 +6,12 @@ use failure::{
 };
 use futures::Future;
 use telegram_bot::{
-    Api,
     Error as TelegramError,
     prelude::*,
     types::Message,
 };
 
+use state::State;
 use super::Action;
 
 /// The action command name.
@@ -44,12 +44,13 @@ impl Action for Ping {
         HELP
     }
 
-    fn invoke(&self, msg: &Message, api: &Api)
+    fn invoke(&self, state: &State, msg: &Message)
         -> Box<Future<Item = (), Error = FailureError>>
     {
         // Build a message future for sending the response
         // TODO: make this time configurable
-        let future = api.send_timeout(
+        let future = state.telegram_client()
+            .send_timeout(
                 msg.text_reply("Pong!"),
                 Duration::from_secs(10),
             )

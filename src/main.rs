@@ -19,6 +19,7 @@ mod executor;
 mod models;
 mod msg;
 mod schema;
+mod state;
 mod util;
 
 use std::env; 
@@ -34,13 +35,11 @@ use futures::{
     Stream,
 };
 use tokio_core::reactor::Core;
-use telegram_bot::{
-    Api,
-    types::UpdateKind,
-};
+use telegram_bot::types::UpdateKind;
 
 use msg::handler::Handler;
 use util::handle_msg_error;
+use state::State;
 
 fn main() {
     // Load the environment variables file
@@ -50,37 +49,30 @@ fn main() {
     let mut core = Core::new().unwrap();
     let core_handle = core.handle();
 
-    // Retieve environment variables
-    let token = env::var("TELEGRAM_BOT_TOKEN")
-        .expect("env var TELEGRAM_BOT_TOKEN not set");
-    let database_url = env::var("DATABASE_URL")
-        .expect("env var DATABASE_URL not set");
+    // Initialize the global state
+    let state = State::init(core.handle());
 
     // Connect to the database
+    let database_url = env::var("DATABASE_URL")
+        .expect("env var DATABASE_URL not set");
     let db = MysqlConnection::establish(&database_url)
         .expect(&format!("Failed to connect to database on {}", database_url));
 
-    // Initiate the Telegram API client
-    let api = Api::configure(token)
-        .build(core.handle())
-        .unwrap();
-
     // Build a future for handling all updates from Telegram
-    let future = api.stream()
+    let future = state.telegram_client().stream()
         // Route new messages through the message handler, drop other updates
         .for_each(|update| {
             // Process messages
             if let UpdateKind::Message(message) = update.kind {
-                // Clone the API instance to get ownership
-                // TODO: do not clone this API as it's probably not needed
-                let api = api.clone();
+                // Clone the state to get ownership
+                let state = state.clone();
 
                 // Build the message handling future, handle any errors
                 let msg_handler = Handler::handle(
+                        &state,
                         message.clone(),
-                        &api,
                     )
-                    .or_else(|err| handle_msg_error(message, api, err)
+                    .or_else(|err| handle_msg_error(state, message, err)
                         .or_else(|err| {
                             println!(
                                 "ERR: failed to handle error while handling message: {:?}",
