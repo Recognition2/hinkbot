@@ -22,12 +22,6 @@ mod schema;
 mod state;
 mod util;
 
-use std::env; 
-
-use diesel::{
-    prelude::*,
-    mysql::MysqlConnection,
-};
 use dotenv::dotenv;
 use futures::{
     Future,
@@ -51,12 +45,6 @@ fn main() {
 
     // Initialize the global state
     let state = State::init(core.handle());
-
-    // Connect to the database
-    let database_url = env::var("DATABASE_URL")
-        .expect("env var DATABASE_URL not set");
-    let db = MysqlConnection::establish(&database_url)
-        .expect(&format!("Failed to connect to database on {}", database_url));
 
     // Build a future for handling all updates from Telegram
     let future = state.telegram_client().stream()

@@ -1,6 +1,10 @@
 use std::env;
 use std::rc::Rc;
 
+use diesel::{
+    mysql::MysqlConnection,
+    prelude::*,
+};
 use telegram_bot::Api;
 use tokio_core::reactor::Handle;
 
@@ -25,8 +29,21 @@ impl State {
     pub fn init(reactor: Handle) -> State {
         State {
             telegram_client: Self::create_telegram_client(reactor),
-            inner: Rc::new(StateInner { }),
+            inner: Rc::new(StateInner {
+                db: Self::create_database(),
+            }),
         }
+    }
+
+    /// Create a MySQL connection to the database.
+    fn create_database() -> MysqlConnection {
+        // Retrieve the database connection URL
+        let database_url = env::var("DATABASE_URL")
+            .expect("env var DATABASE_URL not set");
+
+        // Connect to the database
+        MysqlConnection::establish(&database_url)
+            .expect(&format!("Failed to connect to database on {}", database_url))
     }
 
     /// Create a Telegram API client instance, and initiate a connection.
@@ -41,6 +58,11 @@ impl State {
             .expect("failed to initialize Telegram API client")
     }
 
+    /// Get the database connection.
+    pub fn db(&self) -> &MysqlConnection {
+        &self.inner.db
+    }
+
     /// Get the Telegram API client.
     pub fn telegram_client(&self) -> &Api {
         &self.telegram_client
@@ -48,4 +70,7 @@ impl State {
 }
 
 /// The inner state.
-struct StateInner { }
+struct StateInner {
+    /// The database connection.
+    db: MysqlConnection,
+}
