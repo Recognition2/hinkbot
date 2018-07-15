@@ -21,7 +21,8 @@ table! {
 table! {
     user (telegram_id) {
         telegram_id -> Bigint,
-        name -> Nullable<Text>,
+        first_name -> Nullable<Text>,
+        last_name -> Nullable<Text>,
         created_at -> Datetime,
         updated_at -> Datetime,
     }

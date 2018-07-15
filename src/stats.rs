@@ -25,7 +25,7 @@ impl Stats {
                     .or_insert(HashMap::new())
                     .entry(user)
                     .or_insert(0) += 1,
-            Err(_) => println!("ERR: failed to increase user message count, queue lock error"),
+            Err(_) => println!("ERR: failed lock stats queue, unable to increase user stats"),
         }
     }
 }

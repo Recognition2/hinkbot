@@ -11,7 +11,8 @@ pub struct Chat {
 #[derive(Queryable)]
 pub struct User {
     pub telegram_id: i64,
-    pub name: String,
+    pub first_name: String,
+    pub last_name: String,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
