@@ -23,13 +23,15 @@ mod state;
 mod stats;
 mod util;
 
+use std::time::Duration;
+
 use dotenv::dotenv;
 use futures::{
     Future,
-    future::ok,
+    future::{Executor, ok},
     Stream,
 };
-use tokio_core::reactor::Core;
+use tokio_core::reactor::{Core, Interval};
 use telegram_bot::types::UpdateKind;
 
 use msg::handler::Handler;
@@ -47,8 +49,27 @@ fn main() {
     // Initialize the global state
     let state = State::init(core.handle());
 
+    // Start an interval loop to flush stats to the database
+    // TODO: improve this logic, it's ugly
+    // TODO: make the interval time configurable
+    let stats_state = state.clone();
+    let interval = Interval::new(
+            Duration::from_secs(60),
+            &core.handle(),
+        )
+        .unwrap()
+        .map_err(|_| ())
+        .for_each(move |_| {
+            stats_state.stats().flush(stats_state.db());
+            Ok(())
+        });
+    core.execute(interval);
+
     // Build a future for handling all updates from Telegram
-    let future = state.telegram_client().stream()
+    let future = state
+        .telegram_client()
+        .stream()
+
         // Route new messages through the message handler, drop other updates
         .for_each(|update| {
             // Process messages

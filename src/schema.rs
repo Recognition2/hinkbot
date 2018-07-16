@@ -1,15 +1,14 @@
 table! {
     chat (telegram_id) {
         telegram_id -> Bigint,
-        title -> Text,
+        title -> Varchar,
         created_at -> Datetime,
         updated_at -> Datetime,
     }
 }
 
 table! {
-    chat_user_stats (id) {
-        id -> Integer,
+    chat_user_stats (chat_id, user_id) {
         chat_id -> Bigint,
         user_id -> Bigint,
         messages -> Integer,
@@ -21,7 +20,7 @@ table! {
 table! {
     user (telegram_id) {
         telegram_id -> Bigint,
-        first_name -> Nullable<Text>,
+        first_name -> Text,
         last_name -> Nullable<Text>,
         created_at -> Datetime,
         updated_at -> Datetime,
