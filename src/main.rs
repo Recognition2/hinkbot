@@ -84,7 +84,7 @@ fn main() {
                     )
                     .or_else(|err| handle_msg_error(state, message, err)
                         .or_else(|err| {
-                            println!(
+                            eprintln!(
                                 "ERR: failed to handle error while handling message: {:?}",
                                 err,
                             );

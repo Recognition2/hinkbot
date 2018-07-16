@@ -14,7 +14,8 @@ use schema::{chat, chat_user_stats, user};
 
 pub struct Stats {
     /// A queue of stats that still needs to be pushed to the database.
-    queue: Mutex<HashMap<ChatId, HashMap<UserId, i32>>>,
+    // TODO: use u32
+    queue: Mutex<HashMap<ChatId, HashMap<UserId, u32>>>,
 }
 
 impl Stats {
@@ -34,126 +35,130 @@ impl Stats {
                     .or_insert(HashMap::new())
                     .entry(user)
                     .or_insert(0) += 1,
-            Err(_) => println!("ERR: failed lock stats queue, unable to increase user stats"),
+            Err(_) => eprintln!("ERR: failed lock stats queue, unable to increase user stats"),
         }
     }
 
     /// Flush the queue with stats to the database.
-    // TODO: greatly improve the logic in here, it's a mess currently
+    /// Items successfully pushed to the database are cleared from the queue.
+    /// Any errors while flushing are reported in the console.
     pub fn flush(&self, connection: &MysqlConnection) {
         match self.queue.lock() {
-            Ok(ref mut queue) => {
-                // TODO: set the proper title here
-                // TODO: set the update time
+            Ok(ref mut chats) => Self::flush_chats(chats, connection),
+            Err(err) => eprintln!("ERR: failed lock stats queue, unable to flush to database: {}", err),
+        }
+    }
 
-                // Loop through all the chats in the queu
-                for (new_chat, users) in queue.iter_mut() {
-                    // Ensure the chat exists in the database
-                    match chat::dsl::chat.find(new_chat.to_i64()).first::<Chat>(connection) {
-                        Ok(mut _db_chat) => {
-                            // TODO: update if the title changed, continue on error
-                            // diesel::update(&db_chat)
-                            //     .set((title.eq("title")))
-                            //     .execute(connection);
-                        },
-                        Err(DieselError::NotFound) =>
-                            if let Err(err) = diesel::insert_into(chat::dsl::chat)
-                                .values(chat::dsl::telegram_id.eq(new_chat.to_i64()))
-                                .execute(connection)
-                            {
-                                println!("ERR: failed to create queued chat in database, skipping: {}", err);
-                                continue;
-                            },
-                        Err(_) => {
-                            println!("ERR: failed to check if queued chat exists in the database, skipping");
-                            continue;
-                        },
-                    }
+    /// Flush all chats from the queue to the database
+    /// Items not successfully flashed are retained in the given list, other items are removed.
+    /// Any errors while flushing are reported in the console.
+    pub fn flush_chats(
+        chats: &mut HashMap<ChatId, HashMap<UserId, u32>>,
+        connection: &MysqlConnection,
+    ) {
+        // Flush each chat, remove the successfully flushed
+        chats.retain(|chat, ref mut users| {
+            // Find an existing entry in the database and update it, or create a new entry
+            match chat::dsl::chat.find(chat.to_i64()).first::<Chat>(connection) {
+                Ok(mut _existing) => {
+                    // TODO: update if the title changed
+                    // diesel::update(&existing)
+                    //     .set((title.eq("title")))
+                    //     .execute(connection);
+                },
+                Err(DieselError::NotFound) =>
+                    if let Err(err) = diesel::insert_into(chat::dsl::chat)
+                        .values(chat::dsl::telegram_id.eq(chat.to_i64()))
+                        .execute(connection)
+                    {
+                        eprintln!("ERR: failed to create queued chat in database, skipping: {}", err);
+                        return false;
+                    },
+                Err(err) => {
+                    eprintln!("ERR: failed to check if queued chat exists in the database, skipping: {}", err);
+                    return false;
+                },
+            }
 
-                    // A vector holding the IDs for users the stats were successfully updated for
-                    let mut successful_users = vec![];
+            // Flush all users for this chat to the database
+            Self::flush_users(*chat, users, connection);
 
-                    // Loop through the users in this chat
-                    for (new_user, messages) in users.iter_mut() {
-                        // Ensure the user exists in the database
-                        match user::dsl::user.find(new_user.to_i64()).first::<User>(connection) {
-                            Ok(mut _db_user) => {
-                                // TODO: update if the title changed, continue on error
-                                // diesel::update(&db_user)
-                                //     .set((first_name.eq("First name"), last_name.eq("Last name")))
-                                //     .execute(connection);
-                            },
-                            Err(DieselError::NotFound) =>
-                                if let Err(err) = diesel::insert_into(user::dsl::user)
-                                    .values(user::dsl::telegram_id.eq(new_user.to_i64()))
-                                    .execute(connection)
-                                {
-                                    println!("ERR: failed to create queued user in database, skipping: {}", err);
-                                    continue;
-                                },
-                            Err(_) => {
-                                println!("ERR: failed to check if queued user exists in the database, skipping");
-                                continue;
-                            },
-                        }
+            // Remove the chat entry if the users list is now empty
+            !users.is_empty()
+        });
+    }
 
-                        // Find and update or create the corresponding chat user
-                        let db_chat_user = chat_user_stats::dsl::chat_user_stats
-                            .find((new_chat.to_i64(), new_user.to_i64()))
-                            .first::<ChatUserStats>(connection);
-                        match db_chat_user {
-                            Ok(mut db_chat_user) =>
-                                match diesel::update(&db_chat_user)
-                                    .set(chat_user_stats::dsl::messages.eq(chat_user_stats::dsl::messages + *messages))
-                                    .execute(connection)
-                                {
-                                    Ok(_) => successful_users.push(new_user),
-                                    Err(err) => {
-                                        println!("ERR: failed to create user chat stats in database, skipping: {}", err);
-                                        continue;
-                                    },
-                                },
-                            Err(DieselError::NotFound) =>
-                                match diesel::insert_into(chat_user_stats::dsl::chat_user_stats)
-                                    .values((
-                                        chat_user_stats::dsl::chat_id.eq(new_chat.to_i64()),
-                                        chat_user_stats::dsl::user_id.eq(new_user.to_i64()),
-                                        chat_user_stats::dsl::messages.eq(*messages),
-                                    ))
-                                    .execute(connection)
-                                {
-                                    Ok(_) => successful_users.push(new_user),
-                                    Err(err) => {
-                                        println!("ERR: failed to update user chat stats in database, skipping: {}", err);
-                                        continue;
-                                    },
-                                },
-                            Err(_) => {
-                                println!("ERR: failed to check if queued chat user stats exists in the database, skipping");
-                                continue;
-                            },
-                        }
-                    }
+    /// Flush all users from the given hashmap for a chat to the database.
+    /// If a user doesn't have a record in the database yet, it is created.
+    /// Data for users successfully pushed to the database, is removed from the hashmap.
+    /// Any errors while flushing are reported in the console.
+    pub fn flush_users(
+        chat: ChatId,
+        users: &mut HashMap<UserId, u32>,
+        connection: &MysqlConnection,
+    ) {
+        // Flush all users in this chat, remove successfully flushed
+        users.retain(|user, messages| {
+            // Find an existing entry in the database and update it, or create a new entry
+            match user::dsl::user.find(user.to_i64()).first::<User>(connection) {
+                Ok(mut _existing) => {
+                    // TODO: update if the name changed
+                    // diesel::update(&existing)
+                    //     .set((first_name.eq("First name"), last_name.eq("Last name")))
+                    //     .execute(connection);
+                },
+                Err(DieselError::NotFound) =>
+                    if let Err(err) = diesel::insert_into(user::dsl::user)
+                        .values(user::dsl::telegram_id.eq(user.to_i64()))
+                        .execute(connection)
+                    {
+                        eprintln!("ERR: failed to create queued user in database, skipping: {}", err);
+                        return true;
+                    },
+                Err(err) => {
+                    eprintln!("ERR: failed to check if queued user exists in the database, skipping: {}", err);
+                    return true;
+                },
+            }
 
-                    // // Remove user stats that have successfully been pushed to the database
-                    // for user in successful_users {
-                    //     users.remove(user);
-                    // }
-                }
+            // Flush the user stats to the database, keep them in the list on error
+            let result = Self::flush_user(chat, *user, *messages, connection);
+            if let Err(ref err) = result {
+                eprintln!("ERR: failed to flush chat user stats to database, skipping: {}", err);
+            }
+            result.is_err()
+        });
+    }
 
-                // // Remove chats that don't have any users anymore
-                // let remove_chats: Vec<&ChatId> = queue.iter()
-                //     .filter(|(_, users)| users.is_empty())
-                //     .map(|(chat, _)| chat)
-                //     .collect();
-                // for chat in remove_chats {
-                //     queue.remove(chat);
-                // }
-
-                // TODO: only clear queue items that were successfully pushed to the database
-                queue.clear();
-            },
-            Err(_) => println!("ERR: failed lock stats queue, unable to flush to database"),
+    /// Flush the given user stats in a chat to the database.
+    /// The user stats item is created if it doesn't exist yet.
+    /// If the operation failed, an error is returned.
+    pub fn flush_user(
+        chat: ChatId,
+        user: UserId,
+        messages: u32,
+        connection: &MysqlConnection,
+    ) -> Result<(), DieselError> {
+        // Find an existing entry in the database and update it, or create a new entry
+        match chat_user_stats::dsl::chat_user_stats
+            .find((chat.to_i64(), user.to_i64()))
+            .first::<ChatUserStats>(connection)
+        {
+            Ok(existing) =>
+                diesel::update(&existing)
+                    .set(chat_user_stats::dsl::messages.eq(chat_user_stats::dsl::messages + messages as i32))
+                    .execute(connection)
+                    .map(|_| ()),
+            Err(DieselError::NotFound) =>
+                diesel::insert_into(chat_user_stats::dsl::chat_user_stats)
+                    .values((
+                        chat_user_stats::dsl::chat_id.eq(chat.to_i64()),
+                        chat_user_stats::dsl::user_id.eq(user.to_i64()),
+                        chat_user_stats::dsl::messages.eq(messages as i32),
+                    ))
+                    .execute(connection)
+                    .map(|_| ()),
+            err => err.map(|_| ()),
         }
     }
 }
