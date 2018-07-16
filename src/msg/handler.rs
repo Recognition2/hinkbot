@@ -5,6 +5,7 @@ use futures::{
     Future,
     future::ok,
 };
+use regex::Regex;
 use telegram_bot::{
     Error as TelegramError,
     prelude::*,
@@ -17,6 +18,14 @@ use cmd::handler::{
     matches_cmd,
 };
 use state::State;
+
+lazy_static! {
+    /// A regex for matching messages that contain a Reddit reference.
+    // TODO: two subreddit names with a space in between aren't matched
+    static ref REDDIT_REGEX: Regex = Regex::new(
+        r"(^|\s)(?i)/?r/(?P<r>[A-Z0-9_]{1,100})($|\s)",
+    ).expect("failed to compile REDDIT_REGEX");
+}
 
 /// The generic message handler.
 /// This handler should process all incomming messages from Telegram,
@@ -51,6 +60,11 @@ impl Handler {
                     );
                 }
 
+                // Handle Reddit messages
+                if let Some(future) = Self::handle_reddit(data, &msg, api) {
+                    return Box::new(future);
+                }
+
                 // Route private messages
                 match &msg.chat {
                     MessageChat::Private(..) =>
@@ -64,6 +78,47 @@ impl Handler {
         }
 
         Box::new(ok(()))
+    }
+
+    /// Handle messages with Reddit references, such as messages containing `/r/rust`.
+    /// If the given message does not contain any Reddit Reference, `None` is returned.
+    pub fn handle_reddit(msg_text: &str, msg: &Message, api: &Api)
+        -> Option<impl Future<Item = (), Error = Error>>
+    {
+        // Collect all reddits from the message
+        let mut reddits: Vec<String> = REDDIT_REGEX
+            .captures_iter(msg_text)
+            .map(|r| r.name("r")
+                 .expect("failed to extract r from REDDIT_REGEX")
+                 .as_str()
+                 .to_owned()
+            )
+            .collect();
+        reddits.sort_unstable();
+        reddits.dedup();
+
+        // If none, return
+        if reddits.is_empty() {
+            return None;
+        }
+
+        // Map the reddits into URLs
+        let reddits: Vec<String> = reddits.iter()
+            .map(|r| format!("[/r/{}](https://reddit.com/r/{})", r, r))
+            .collect();
+
+        // Send a response
+        // TODO: make timeout configurable
+        Some(
+            api.send_timeout(
+                    msg.text_reply(reddits.join("\n"))
+                        .parse_mode(ParseMode::Markdown)
+                        .disable_notification(),
+                    Duration::from_secs(10),
+                )
+                .map(|_| ())
+                .map_err(|err| Error::HandleReddit(SyncFailure::new(err)))
+        )
     }
 
     /// Handle the give private/direct message.
@@ -92,6 +147,10 @@ pub enum Error {
     /// An error occurred while processing a command.
     #[fail(display = "failed to process command message")]
     HandleCmd(#[cause] CmdHandlerError),
+
+    /// An error occurred while processing a Reddit message.
+    #[fail(display = "failed to process reddit message")]
+    HandleReddit(#[cause] SyncFailure<TelegramError>),
 
     /// An error occurred while processing a private message.
     #[fail(display = "failed to process private message")]

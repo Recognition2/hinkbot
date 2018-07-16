@@ -65,7 +65,7 @@ impl Handler {
     }
 }
 
-/// Test whehter the given message is recognized as a command.
+/// Test wether the given message is recognized as a command.
 ///
 /// The actual command name is returned if it is, `None` otherwise.
 // TODO: if a target bot is given with `/cmd@bot`, ensure it's username is matching
