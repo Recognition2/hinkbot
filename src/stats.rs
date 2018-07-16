@@ -14,7 +14,6 @@ use schema::{chat, chat_user_stats, user};
 
 pub struct Stats {
     /// A queue of stats that still needs to be pushed to the database.
-    // TODO: use u32
     queue: Mutex<HashMap<ChatId, HashMap<UserId, u32>>>,
 }
 

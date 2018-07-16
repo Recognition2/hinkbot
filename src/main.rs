@@ -28,50 +28,44 @@ use std::time::Duration;
 use dotenv::dotenv;
 use futures::{
     Future,
-    future::{Executor, ok},
+    future::ok,
     Stream,
 };
-use tokio_core::reactor::{Core, Interval};
+use tokio_core::reactor::{Core, Handle, Interval};
 use telegram_bot::types::UpdateKind;
 
 use msg::handler::Handler;
 use util::handle_msg_error;
 use state::State;
 
+/// The application entrypoint.
 fn main() {
     // Load the environment variables file
     dotenv().ok();
 
     // Build a future reactor
     let mut core = Core::new().unwrap();
-    let core_handle = core.handle();
 
     // Initialize the global state
     let state = State::init(core.handle());
 
-    // Start an interval loop to flush stats to the database
-    // TODO: improve this logic, it's ugly
-    // TODO: make the interval time configurable
-    let stats_state = state.clone();
-    let interval = Interval::new(
-            Duration::from_secs(60),
-            &core.handle(),
-        )
-        .unwrap()
-        .map_err(|_| ())
-        .for_each(move |_| {
-            stats_state.stats().flush(stats_state.db());
-            Ok(())
-        });
-    core.execute(interval);
+    // Build a stats flusher and Telegram API updates handler future
+    let stats_flusher = build_stats_flusher(state.clone(), core.handle());
+    let telegram = build_telegram_handler(state.clone(), core.handle());
 
-    // Build a future for handling all updates from Telegram
-    let future = state
-        .telegram_client()
+    // Run the bot handling future in the reactor
+    core.run(
+        telegram.join(stats_flusher),
+    ).unwrap();
+}
+
+/// Build a future for handling Telegram API updates.
+fn build_telegram_handler(state: State, handle: Handle)
+    -> impl Future<Item = (), Error = ()>
+{
+    state.telegram_client()
         .stream()
-
-        // Route new messages through the message handler, drop other updates
-        .for_each(|update| {
+        .for_each(move |update| {
             // Process messages
             if let UpdateKind::Message(message) = update.kind {
                 // Clone the state to get ownership
@@ -93,12 +87,28 @@ fn main() {
                     );
 
                 // Spawn the message handler future on the reactor
-                core_handle.spawn(msg_handler);
+                handle.spawn(msg_handler);
             }
 
             ok(())
-        });
+        })
+        .map_err(|err| {
+            eprintln!("ERR: Telegram API updates loop error, ignoring: {}", err);
+            ()
+        })
+}
 
-    // Run the bot handling future in the reactor
-    core.run(future).unwrap();
+/// Build a future for handling Telegram API updates.
+// TODO: make the interval time configurable
+fn build_stats_flusher(state: State, handle: Handle) -> impl Future<Item = (), Error = ()> {
+    Interval::new(
+            Duration::from_secs(60),
+            &handle,
+        )
+        .expect("failed to build stats flushing interval future")
+        .for_each(move |_| {
+            state.stats().flush(state.db());
+            Ok(())
+        })
+        .map_err(|_| ())
 }
