@@ -14,7 +14,7 @@ use schema::{chat, chat_user_stats, user};
 
 pub struct Stats {
     /// A queue of stats that still needs to be pushed to the database.
-    queue: Mutex<HashMap<ChatId, HashMap<UserId, u32>>>,
+    queue: Mutex<HashMap<ChatId, HashMap<UserId, (u32, u32)>>>,
 }
 
 impl Stats {
@@ -27,13 +27,14 @@ impl Stats {
 
     /// Increase the total message count for the given user in the given chat.
     /// The update is pushed to the queue, to be pushed to the database periodically.
+    // TODO: also allow to increase edits
     pub fn increase_messages(&self, chat: ChatId, user: UserId) {
         match self.queue.lock() {
             Ok(ref mut queue) =>
-                *queue.entry(chat)
+                queue.entry(chat)
                     .or_insert(HashMap::new())
                     .entry(user)
-                    .or_insert(0) += 1,
+                    .or_insert((0, 0)).0 += 1,
             Err(_) => eprintln!("ERR: failed lock stats queue, unable to increase user stats"),
         }
     }
@@ -52,7 +53,7 @@ impl Stats {
     /// Items not successfully flashed are retained in the given list, other items are removed.
     /// Any errors while flushing are reported in the console.
     pub fn flush_chats(
-        chats: &mut HashMap<ChatId, HashMap<UserId, u32>>,
+        chats: &mut HashMap<ChatId, HashMap<UserId, (u32, u32)>>,
         connection: &MysqlConnection,
     ) {
         // Flush each chat, remove the successfully flushed
@@ -93,11 +94,11 @@ impl Stats {
     /// Any errors while flushing are reported in the console.
     pub fn flush_users(
         chat: ChatId,
-        users: &mut HashMap<UserId, u32>,
+        users: &mut HashMap<UserId, (u32, u32)>,
         connection: &MysqlConnection,
     ) {
         // Flush all users in this chat, remove successfully flushed
-        users.retain(|user, messages| {
+        users.retain(|user, (messages, edits)| {
             // Find an existing entry in the database and update it, or create a new entry
             match user::dsl::user.find(user.to_i64()).first::<User>(connection) {
                 Ok(mut _existing) => {
@@ -121,7 +122,7 @@ impl Stats {
             }
 
             // Flush the user stats to the database, keep them in the list on error
-            let result = Self::flush_user(chat, *user, *messages, connection);
+            let result = Self::flush_user(chat, *user, *messages, *edits, connection);
             if let Err(ref err) = result {
                 eprintln!("ERR: failed to flush chat user stats to database, skipping: {}", err);
             }
@@ -136,6 +137,7 @@ impl Stats {
         chat: ChatId,
         user: UserId,
         messages: u32,
+        edits: u32,
         connection: &MysqlConnection,
     ) -> Result<(), DieselError> {
         // Find an existing entry in the database and update it, or create a new entry
@@ -148,6 +150,7 @@ impl Stats {
                     .set((
                         chat_user_stats::dsl::message_type.eq(1),
                         chat_user_stats::dsl::messages.eq(chat_user_stats::dsl::messages + messages as i32),
+                        chat_user_stats::dsl::edits.eq(chat_user_stats::dsl::edits + edits as i32),
                     ))
                     .execute(connection)
                     .map(|_| ()),
@@ -157,6 +160,7 @@ impl Stats {
                         chat_user_stats::dsl::chat_id.eq(chat.to_i64()),
                         chat_user_stats::dsl::user_id.eq(user.to_i64()),
                         chat_user_stats::dsl::messages.eq(messages as i32),
+                        chat_user_stats::dsl::edits.eq(edits as i32),
                     ))
                     .execute(connection)
                     .map(|_| ()),
