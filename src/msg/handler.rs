@@ -61,7 +61,7 @@ impl Handler {
                 }
 
                 // Handle Reddit messages
-                if let Some(future) = Self::handle_reddit(data, &msg, api) {
+                if let Some(future) = Self::handle_reddit(state, data, &msg) {
                     return Box::new(future);
                 }
 
@@ -82,7 +82,7 @@ impl Handler {
 
     /// Handle messages with Reddit references, such as messages containing `/r/rust`.
     /// If the given message does not contain any Reddit Reference, `None` is returned.
-    pub fn handle_reddit(msg_text: &str, msg: &Message, api: &Api)
+    pub fn handle_reddit(state: &State, msg_text: &str, msg: &Message)
         -> Option<impl Future<Item = (), Error = Error>>
     {
         // Collect all reddits from the message
@@ -110,7 +110,8 @@ impl Handler {
         // Send a response
         // TODO: make timeout configurable
         Some(
-            api.send_timeout(
+            state.telegram_client()
+                .send_timeout(
                     msg.text_reply(reddits.join("\n"))
                         .parse_mode(ParseMode::Markdown)
                         .disable_notification(),
