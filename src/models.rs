@@ -29,7 +29,9 @@ pub struct User {
 pub struct ChatUserStats {
     pub chat_id: i64,
     pub user_id: i64,
+    pub message_type: i16,
     pub messages: i32,
+    pub edits: i32,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }

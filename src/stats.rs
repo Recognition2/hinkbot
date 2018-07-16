@@ -145,7 +145,10 @@ impl Stats {
         {
             Ok(existing) =>
                 diesel::update(&existing)
-                    .set(chat_user_stats::dsl::messages.eq(chat_user_stats::dsl::messages + messages as i32))
+                    .set((
+                        chat_user_stats::dsl::message_type.eq(1),
+                        chat_user_stats::dsl::messages.eq(chat_user_stats::dsl::messages + messages as i32),
+                    ))
                     .execute(connection)
                     .map(|_| ()),
             Err(DieselError::NotFound) =>

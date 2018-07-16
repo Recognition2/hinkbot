@@ -11,7 +11,9 @@ table! {
     chat_user_stats (chat_id, user_id) {
         chat_id -> Bigint,
         user_id -> Bigint,
+        message_type -> Smallint,
         messages -> Integer,
+        edits -> Integer,
         created_at -> Datetime,
         updated_at -> Datetime,
     }

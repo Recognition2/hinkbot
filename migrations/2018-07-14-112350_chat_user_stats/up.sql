@@ -1,7 +1,9 @@
 CREATE TABLE chat_user_stats (
   chat_id       BIGINT      NOT NULL,
   user_id       BIGINT      NOT NULL,
+  message_type  SMALLINT    NOT NULL,
   messages      INT         NOT NULL,
+  edits         INT         NOT NULL,
   created_at    DATETIME    NOT NULL
     DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME    NOT NULL
