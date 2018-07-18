@@ -37,6 +37,10 @@ impl Handler {
     pub fn handle(state: &State, msg: Message)
         -> Box<Future<Item = (), Error = Error>>
     {
+
+        // Update the message stats
+        state.stats().increase_stats(msg.chat.id(), msg.from.id, &msg.kind, 1, 0);
+
         match &msg.kind {
             MessageKind::Text {
                 ref data,
@@ -49,9 +53,6 @@ impl Handler {
                     &msg.chat.id(),
                     data,
                 );
-
-                // Update the message stats
-                state.stats().increase_messages(msg.chat.id(), msg.from.id);
 
                 // Route the message to the command handler, if it's a command
                 if let Some(cmd) = matches_cmd(data) {

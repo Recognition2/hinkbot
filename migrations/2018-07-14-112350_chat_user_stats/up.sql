@@ -10,7 +10,7 @@ CREATE TABLE chat_user_stats (
     DEFAULT CURRENT_TIMESTAMP
     ON UPDATE CURRENT_TIMESTAMP,
 
-  PRIMARY KEY (chat_id, user_id),
+  PRIMARY KEY (chat_id, user_id, message_type),
   FOREIGN KEY (chat_id)
     REFERENCES chat(telegram_id)
     ON DELETE CASCADE,

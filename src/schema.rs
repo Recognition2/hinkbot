@@ -8,7 +8,7 @@ table! {
 }
 
 table! {
-    chat_user_stats (chat_id, user_id) {
+    chat_user_stats (chat_id, user_id, message_type) {
         chat_id -> Bigint,
         user_id -> Bigint,
         message_type -> Smallint,

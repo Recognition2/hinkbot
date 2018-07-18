@@ -24,7 +24,7 @@ pub struct User {
 }
 
 #[derive(Queryable, Identifiable)]
-#[primary_key(chat_id, user_id)]
+#[primary_key(chat_id, user_id, message_type)]
 #[table_name = "chat_user_stats"]
 pub struct ChatUserStats {
     pub chat_id: i64,
