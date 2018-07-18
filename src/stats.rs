@@ -282,7 +282,7 @@ impl StatsKind {
 
     /// Get the stats kind for the given ID.
     /// If the given ID is invalid, `None` is returned.
-    pub fn from_id(&self, id: i16) -> Option<StatsKind> {
+    pub fn _from_id(&self, id: i16) -> Option<StatsKind> {
         match id {
             1 => Some(StatsKind::Text),
             2 => Some(StatsKind::Command),
