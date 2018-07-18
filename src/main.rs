@@ -1,3 +1,4 @@
+extern crate chan_signal;
 extern crate chrono;
 #[macro_use]
 extern crate diesel;
@@ -23,12 +24,15 @@ mod state;
 mod stats;
 mod util;
 
+use std::process::exit;
+use std::thread;
 use std::time::Duration;
 
+use chan_signal::Signal;
 use dotenv::dotenv;
 use futures::{
     Future,
-    future::ok,
+    future::{Executor, ok},
     Stream,
 };
 use tokio_core::reactor::{Core, Handle, Interval};
@@ -40,11 +44,31 @@ use state::State;
 
 /// The application entrypoint.
 fn main() {
+    // Register signals to be identified with
+    let signal = chan_signal::notify(&[Signal::INT, Signal::TERM]);
+
     // Load the environment variables file
     dotenv().ok();
 
+    // Start the reactor
+    thread::spawn(start_reactor);
+
+    // Receive a signal to quit
+    if let Some(signal) = signal.recv() {
+        eprintln!("Received signal: {:?}", signal);
+        // TODO: flush all stats to the database before quitting
+        exit(0);
+    } else {
+        eprintln!("Failed to recieve signal");
+        exit(1);
+    }
+}
+
+/// Start the actual reactor, which will be the event loop for the Telegram API client and
+/// additional processes.
+fn start_reactor() {
     // Build a future reactor
-    let mut core = Core::new().unwrap();
+    let core = Core::new().unwrap();
 
     // Initialize the global state
     let state = State::init(core.handle());
@@ -54,8 +78,8 @@ fn main() {
     let telegram = build_telegram_handler(state.clone(), core.handle());
 
     // Run the bot handling future in the reactor
-    core.run(
-        telegram.join(stats_flusher),
+    core.execute(
+        telegram.join(stats_flusher).map(|_| ()),
     ).unwrap();
 }
 
@@ -110,11 +134,12 @@ fn build_telegram_handler(state: State, handle: Handle)
 // TODO: make the interval time configurable
 fn build_stats_flusher(state: State, handle: Handle) -> impl Future<Item = (), Error = ()> {
     Interval::new(
-            Duration::from_secs(60),
+            Duration::from_secs(3),
             &handle,
         )
         .expect("failed to build stats flushing interval future")
         .for_each(move |_| {
+            println!("FLUSH");
             state.stats().flush(state.db());
             Ok(())
         })
