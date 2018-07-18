@@ -32,7 +32,7 @@ use chan_signal::Signal;
 use dotenv::dotenv;
 use futures::{
     Future,
-    future::{Executor, ok},
+    future::ok,
     Stream,
 };
 use tokio_core::reactor::{Core, Handle, Interval};
@@ -68,7 +68,7 @@ fn main() {
 /// additional processes.
 fn start_reactor() {
     // Build a future reactor
-    let core = Core::new().unwrap();
+    let mut core = Core::new().unwrap();
 
     // Initialize the global state
     let state = State::init(core.handle());
@@ -78,7 +78,7 @@ fn start_reactor() {
     let telegram = build_telegram_handler(state.clone(), core.handle());
 
     // Run the bot handling future in the reactor
-    core.execute(
+    core.run(
         telegram.join(stats_flusher).map(|_| ()),
     ).unwrap();
 }
