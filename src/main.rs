@@ -66,28 +66,36 @@ fn build_telegram_handler(state: State, handle: Handle)
     state.telegram_client()
         .stream()
         .for_each(move |update| {
+            // Clone the state to get ownership
+            let state = state.clone();
+
             // Process messages
-            if let UpdateKind::Message(message) = update.kind {
-                // Clone the state to get ownership
-                let state = state.clone();
+            match update.kind {
+                UpdateKind::Message(message) => {
+                    // Update the message stats
+                    state.stats().increase_message_stats(&message, 1, 0);
 
-                // Build the message handling future, handle any errors
-                let msg_handler = Handler::handle(
-                        &state,
-                        message.clone(),
-                    )
-                    .or_else(|err| handle_msg_error(state, message, err)
-                        .or_else(|err| {
-                            eprintln!(
-                                "ERR: failed to handle error while handling message: {:?}",
-                                err,
-                            );
-                            ok(())
-                        })
-                    );
+                    // Build the message handling future, handle any errors
+                    let msg_handler = Handler::handle(
+                            &state,
+                            message.clone(),
+                        )
+                        .or_else(|err| handle_msg_error(state, message, err)
+                            .or_else(|err| {
+                                eprintln!(
+                                    "ERR: failed to handle error while handling message: {:?}",
+                                    err,
+                                );
+                                ok(())
+                            })
+                        );
 
-                // Spawn the message handler future on the reactor
-                handle.spawn(msg_handler);
+                    // Spawn the message handler future on the reactor
+                    handle.spawn(msg_handler);
+                },
+                UpdateKind::EditedMessage(message) =>
+                    state.stats().increase_message_stats(&message, 0, 1),
+                _ => {},
             }
 
             ok(())

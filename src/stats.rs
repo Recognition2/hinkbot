@@ -7,7 +7,7 @@ use diesel::{
     result::Error as DieselError,
     self,
 };
-use telegram_bot::types::{ChatId, MessageKind, UserId};
+use telegram_bot::types::{ChatId, Message, MessageKind, UserId};
 
 use models::{Chat, ChatUserStats, User};
 use schema::{chat, chat_user_stats, user};
@@ -51,7 +51,15 @@ impl Stats {
                 Err(_) => eprintln!("ERR: failed lock stats queue, unable to increase user stats"),
             }
         }
-    } 
+    }
+
+    /// Increase the total message and edits count for the given message.
+    /// The update is pushed to the queue, to be pushed to the database periodically.
+    /// If the given message kind is not a counted stat, nothing happends.
+    pub fn increase_message_stats(&self, message: &Message, messages: u32, edits: u32) {
+        self.increase_stats(message.chat.id(), message.from.id, &message.kind, messages, edits);
+    }
+
     /// Flush the queue with stats to the database.
     /// Items successfully pushed to the database are cleared from the queue.
     /// Any errors while flushing are reported in the console.
