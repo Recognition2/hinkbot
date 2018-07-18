@@ -37,7 +37,6 @@ impl Handler {
     pub fn handle(state: &State, msg: Message)
         -> Box<Future<Item = (), Error = Error>>
     {
-
         // Update the message stats
         state.stats().increase_stats(msg.chat.id(), msg.from.id, &msg.kind, 1, 0);
 

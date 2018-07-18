@@ -46,7 +46,7 @@ impl Stats {
                         .entry(message_type)
                         .or_insert((0, 0));
                     entry.0 += messages;
-                    entry.0 += edits;
+                    entry.1 += edits;
                 },
                 Err(_) => eprintln!("ERR: failed lock stats queue, unable to increase user stats"),
             }
@@ -181,7 +181,6 @@ impl Stats {
             Ok(existing) =>
                 diesel::update(&existing)
                     .set((
-                        chat_user_stats::dsl::message_type.eq(message_type.to_id()),
                         chat_user_stats::dsl::messages.eq(chat_user_stats::dsl::messages + messages as i32),
                         chat_user_stats::dsl::edits.eq(chat_user_stats::dsl::edits + edits as i32),
                     ))
@@ -207,8 +206,10 @@ impl Stats {
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum StatsKind {
     Text,
+    Command,
     Audio,
     Document,
+    Gif,
     Photo,
     Sticker,
     Video,
@@ -227,9 +228,27 @@ impl StatsKind {
     /// Some kinds do not have a corresponding stats kind, `None` will be returned for these.
     fn from_message_kind(kind: &MessageKind) -> Option<Self> {
         match kind {
-            MessageKind::Text { .. } => Some(StatsKind::Text),
+            MessageKind::Text { data, .. } => if data.trim_left().starts_with('/') {
+                    Some(StatsKind::Command)
+                } else {
+                    Some(StatsKind::Text)
+                },
             MessageKind::Audio { .. } => Some(StatsKind::Audio),
-            MessageKind::Document { .. } => Some(StatsKind::Document),
+            MessageKind::Document { data, .. } => {
+                    // If the MIME type is a gif, it must be a GIF
+                    if data.mime_type == Some("image/gif".into()) {
+                        return Some(StatsKind::Gif);
+                    }
+
+                    // If the mime type is MP4, and the filename is from Giphy, it may be a GIF
+                    if data.mime_type == Some("video/mp4".into())
+                        && data.file_name == Some("giphy.mp4".into())
+                    {
+                        return Some(StatsKind::Gif);
+                    }
+
+                    Some(StatsKind::Document)
+                },
             MessageKind::Photo { .. } => Some(StatsKind::Photo),
             MessageKind::Sticker { .. } => Some(StatsKind::Sticker),
             MessageKind::Video { .. } => Some(StatsKind::Video),
@@ -258,19 +277,21 @@ impl StatsKind {
     pub fn from_id(&self, id: i16) -> Option<StatsKind> {
         match id {
             1 => Some(StatsKind::Text),
-            2 => Some(StatsKind::Audio),
-            3 => Some(StatsKind::Document),
-            4 => Some(StatsKind::Photo),
-            5 => Some(StatsKind::Sticker),
-            6 => Some(StatsKind::Video),
-            7 => Some(StatsKind::Voice),
-            8 => Some(StatsKind::VideoNote),
-            9 => Some(StatsKind::Contact),
-            10 => Some(StatsKind::Location),
-            11 => Some(StatsKind::Venue),
-            12 => Some(StatsKind::ChatTitle),
-            13 => Some(StatsKind::ChatPhoto),
-            14 => Some(StatsKind::PinnedMessage),
+            2 => Some(StatsKind::Command),
+            3 => Some(StatsKind::Audio),
+            4 => Some(StatsKind::Document),
+            5 => Some(StatsKind::Gif),
+            6 => Some(StatsKind::Photo),
+            7 => Some(StatsKind::Sticker),
+            8 => Some(StatsKind::Video),
+            9 => Some(StatsKind::Voice),
+            10 => Some(StatsKind::VideoNote),
+            11 => Some(StatsKind::Contact),
+            12 => Some(StatsKind::Location),
+            13 => Some(StatsKind::Venue),
+            14 => Some(StatsKind::ChatTitle),
+            15 => Some(StatsKind::ChatPhoto),
+            16 => Some(StatsKind::PinnedMessage),
             _ => None,
         }
     }
@@ -279,19 +300,21 @@ impl StatsKind {
     pub fn to_id(&self) -> i16 {
         match self {
             StatsKind::Text => 1,
-            StatsKind::Audio => 2,
-            StatsKind::Document => 3,
-            StatsKind::Photo => 4,
-            StatsKind::Sticker => 5,
-            StatsKind::Video => 6,
-            StatsKind::Voice => 7,
-            StatsKind::VideoNote => 8,
-            StatsKind::Contact => 9,
-            StatsKind::Location => 10,
-            StatsKind::Venue => 11,
-            StatsKind::ChatTitle => 12,
-            StatsKind::ChatPhoto => 13,
-            StatsKind::PinnedMessage => 14,
+            StatsKind::Command => 2,
+            StatsKind::Audio => 3,
+            StatsKind::Document => 4,
+            StatsKind::Gif => 5,
+            StatsKind::Photo => 6,
+            StatsKind::Sticker => 7,
+            StatsKind::Video => 8,
+            StatsKind::Voice => 9,
+            StatsKind::VideoNote => 10,
+            StatsKind::Contact => 11,
+            StatsKind::Location => 12,
+            StatsKind::Venue => 13,
+            StatsKind::ChatTitle => 14,
+            StatsKind::ChatPhoto => 15,
+            StatsKind::PinnedMessage => 16,
         }
     }
 }

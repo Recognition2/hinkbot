@@ -367,7 +367,7 @@ impl Id {
                     info += &format!(
                         "\n\
                             Document thumb file ID: `{}`\n\
-                            Document pixels: _{}x{}_\
+                            Document thumb pixels: _{}x{}_\
                         ",
                         thumb.file_id,
                         thumb.width,
@@ -394,7 +394,7 @@ impl Id {
                 // Append the mime type
                 if let Some(ref mime) = data.mime_type {
                     info += &format!(
-                        "\nAudio mime: _{}_",
+                        "\nDocument mime: _{}_",
                         mime,
                     );
                 }
