@@ -5,6 +5,8 @@ use std::process::ExitStatus;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
+use state::State;
+
 use failure::{
     Compat,
     err_msg,
@@ -18,7 +20,6 @@ use futures::{
 };
 use humantime::format_duration;
 use telegram_bot::{
-    Api,
     Error as TelegramError,
     prelude::*,
     types::{Message, MessageKind, ParseMode},
@@ -64,11 +65,11 @@ impl Exec {
     ///
     /// Send a reply to the given user command `msg`
     /// and timely update it to show the status of the command that was executed.
-    pub fn exec_cmd<'a>(cmd: String, api: Api, msg: &Message)
+    pub fn exec_cmd<'a>(state: &State, cmd: String, msg: &Message)
         -> impl Future<Item = (), Error = Error>
     {
         // Create the status message, and build the executable status object
-        let exec_status = ExecStatus::create_status_msg(msg, api.clone());
+        let exec_status = ExecStatus::create_status_msg(state.clone(), msg);
 
         // Build a future for the command execution, and status updating
         exec_status.and_then(move |status| {
@@ -127,17 +128,13 @@ impl Action for Exec {
     }
 
     // TODO: proper error handling everywhere, pass errors along
-    fn invoke(&self, msg: &Message, api: &Api)
+    fn invoke(&self, state: &State, msg: &Message)
         -> Box<Future<Item = (), Error = FailureError>>
     {
         if let MessageKind::Text {
             ref data,
             ..
         } = &msg.kind {
-
-            // The Telegram API client to use
-            let api = api.clone();
-
             // The command to run in the shell
             // TODO: actually properly fetch the command to execute from the full message
             let cmd = data.splitn(2, ' ')
@@ -151,7 +148,9 @@ impl Action for Exec {
             if cmd.trim().is_empty() {
                 // Build a future for sending the help message
                 // TODO: make this timeout configurable
-                let future = api.send_timeout(
+                let future = state
+                    .telegram_client()
+                    .send_timeout(
                         msg.text_reply("\
                                 Please provide a command to run.\n\
                                 \n\
@@ -172,7 +171,7 @@ impl Action for Exec {
 
             // Execute the command, report back to the user
             return Box::new(
-                Self::exec_cmd(cmd, api, msg).from_err(),
+                Self::exec_cmd(state, cmd, msg).from_err(),
             );
         } else {
             Box::new(ok(()))
@@ -182,7 +181,7 @@ impl Action for Exec {
 
 /// An object that tracks the status of an executed command.
 /// This object also holds the status message present in a Telegram group to update when the status
-/// changes, along with an Telegram API instance.
+/// changes, along with the global state.
 // TODO: detect timeouts
 // TODO: report execution times
 pub struct ExecStatus {
@@ -213,8 +212,8 @@ pub struct ExecStatus {
     /// The number of times the status message in Telegram was updated.
     updated_count: usize,
 
-    /// An Telegram API client to update the status message with.
-    api: Api,
+    /// The global state to communicate through Telegram.
+    state: State,
 
     /// The status message in a Telegram chat that should be updated to report the executing
     /// status.
@@ -224,12 +223,13 @@ pub struct ExecStatus {
 impl ExecStatus {
     /// Create a status output message as reply on the given `msg`,
     /// and return an `ExecStatus` for it.
-    pub fn create_status_msg(msg: &Message, api: Api)
+    pub fn create_status_msg(state: State, msg: &Message)
         -> impl Future<Item = Self, Error = Error>
     {
         // TODO: make this timeout configurable
         // TODO: handle the Telegram errors properly
-        api.send_timeout(
+        state.telegram_client()
+            .send_timeout(
                 msg.text_reply("<i>Executing command...</i>")
                     .parse_mode(ParseMode::Html),
                 Duration::from_secs(10),
@@ -237,7 +237,7 @@ impl ExecStatus {
             .map_err(|err| -> FailureError { SyncFailure::new(err).into() })
             .map_err(|err| Error::StatusMessage(err.compat()))
             .and_then(|msg| if let Some(msg) = msg {
-                ok(ExecStatus::new(msg, api))
+                ok(ExecStatus::new(state, msg))
             } else {
                 err(Error::StatusMessage(err_msg(
                     "failed to send command status message, got empty response from Telegram API",
@@ -245,9 +245,8 @@ impl ExecStatus {
             })
     }
 
-    /// Build a new exec status object with the given status message and Telegram API client
-    /// instance.
-    pub fn new(status_msg: Message, api: Api) -> Self {
+    /// Build a new exec status object with the given status message and the global state.
+    pub fn new(state: State, status_msg: Message) -> Self {
         ExecStatus {
             output: String::new(),
             status: None,
@@ -256,7 +255,7 @@ impl ExecStatus {
             changed: false,
             changed_at: SystemTime::now(),
             updated_count: 0,
-            api,
+            state,
             status_msg,
         }
     }
@@ -398,11 +397,12 @@ impl ExecStatus {
     // TODO: should we return a future for updating, to allow catching errors?
     pub fn update_status_msg(&mut self) {
         // Spawn a future to edit the status message with the newest build status text
-        self.api.spawn(
-            self.status_msg
-                .edit_text(self.build_status_msg())
-                .parse_mode(ParseMode::Html)
-        );
+        self.state.telegram_client()
+            .spawn(
+                self.status_msg
+                    .edit_text(self.build_status_msg())
+                    .parse_mode(ParseMode::Html)
+            );
 
         // Reset the changed status
         self.changed = false;

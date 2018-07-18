@@ -6,13 +6,13 @@ use failure::{
 };
 use futures::Future;
 use telegram_bot::{
-    Api,
     Error as TelegramError,
     prelude::*,
     types::{Message, ParseMode},
 };
 
 use app::{NAME, VERSION};
+use state::State;
 use super::Action;
 
 /// The action command name.
@@ -45,12 +45,13 @@ impl Action for Risc {
         HELP
     }
 
-    fn invoke(&self, msg: &Message, api: &Api)
+    fn invoke(&self, state: &State, msg: &Message)
         -> Box<Future<Item = (), Error = FailureError>>
     {
         // Build a future for sending the response message
         // TODO: make the timeout configurable
-        let future = api.send_timeout(
+        let future = state.telegram_client()
+            .send_timeout(
                 msg.text_reply(format!(
                         "\
                             `{} v{}`\n\

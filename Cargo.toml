@@ -4,8 +4,11 @@ version = "0.0.1"
 authors = ["timvisee <timvisee@gmail.com>"]
 
 [dependencies]
+chan-signal = "0.3"
 chrono = "0.4"
 colored = "1.6"
+diesel = { version = "1.3", features = ["chrono", "mysql"] }
+dotenv = "0.13"
 failure = "0.1"
 futures = "0.1"
 humansize = "0.1"

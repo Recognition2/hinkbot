@@ -7,7 +7,6 @@ use futures::{
 };
 use regex::Regex;
 use telegram_bot::{
-    Api,
     Error as TelegramError,
     prelude::*,
     types::{Message, MessageChat, MessageKind, ParseMode},
@@ -18,6 +17,7 @@ use cmd::handler::{
     Handler as CmdHandler,
     matches_cmd,
 };
+use state::State;
 
 lazy_static! {
     /// A regex for matching messages that contain a Reddit reference.
@@ -34,7 +34,7 @@ pub struct Handler;
 
 impl Handler {
     /// Handle the given message.
-    pub fn handle(msg: Message, api: &Api)
+    pub fn handle(state: &State, msg: Message)
         -> Box<Future<Item = (), Error = Error>>
     {
         match &msg.kind {
@@ -53,12 +53,12 @@ impl Handler {
                 // Route the message to the command handler, if it's a command
                 if let Some(cmd) = matches_cmd(data) {
                     return Box::new(
-                        CmdHandler::handle(cmd, msg.clone(), api).from_err(),
+                        CmdHandler::handle(state, cmd, msg.clone()).from_err(),
                     );
                 }
 
                 // Handle Reddit messages
-                if let Some(future) = Self::handle_reddit(data, &msg, api) {
+                if let Some(future) = Self::handle_reddit(state, data, &msg) {
                     return Box::new(future);
                 }
 
@@ -66,7 +66,7 @@ impl Handler {
                 match &msg.chat {
                     MessageChat::Private(..) =>
                         return Box::new(
-                            Self::handle_private(&msg, api),
+                            Self::handle_private(state, &msg),
                         ),
                     _ => {},
                 }
@@ -79,7 +79,7 @@ impl Handler {
 
     /// Handle messages with Reddit references, such as messages containing `/r/rust`.
     /// If the given message does not contain any Reddit Reference, `None` is returned.
-    pub fn handle_reddit(msg_text: &str, msg: &Message, api: &Api)
+    pub fn handle_reddit(state: &State, msg_text: &str, msg: &Message)
         -> Option<impl Future<Item = (), Error = Error>>
     {
         // Collect all reddits from the message
@@ -107,7 +107,8 @@ impl Handler {
         // Send a response
         // TODO: make timeout configurable
         Some(
-            api.send_timeout(
+            state.telegram_client()
+                .send_timeout(
                     msg.text_reply(reddits.join("\n"))
                         .parse_mode(ParseMode::Markdown)
                         .disable_notification(),
@@ -119,12 +120,13 @@ impl Handler {
     }
 
     /// Handle the give private/direct message.
-    pub fn handle_private(msg: &Message, api: &Api)
+    pub fn handle_private(state: &State, msg: &Message)
         -> impl Future<Item = (), Error = Error>
     {
         // Send a message to the user
         // TODO: make timeout configurable
-        api.send_timeout(
+        state.telegram_client()
+            .send_timeout(
                 msg.text_reply(format!(
                         "`BLEEP BLOOP`\n`I AM A BOT`\n\n{}, direct messages are not supported yet.",
                         msg.from.first_name,

@@ -11,10 +11,9 @@ use failure::{
     Error as FailureError,
 };
 use futures::Future;
-use telegram_bot::{
-    Api,
-    types::Message,
-};
+use telegram_bot::types::Message;
+
+use state::State;
 
 pub trait Action {
     /// Get the command name for this action.
@@ -37,7 +36,7 @@ pub trait Action {
     fn help(&self) -> &'static str;
 
     /// Invoke the action with the given context.
-    fn invoke(&self, msg: &Message, api: &Api)
+    fn invoke(&self, state: &State, sg: &Message)
         -> Box<Future<Item = (), Error = FailureError>>;
 }
 

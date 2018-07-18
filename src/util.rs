@@ -7,11 +7,12 @@ use failure::Fail;
 use futures::Future;
 use self::colored::*;
 use telegram_bot::{
-    Api,
     Error as TelegramError,
     prelude::*,
     types::{Message, ParseMode},
 };
+
+use state::State;
 
 /// Print the given error in a proper format for the user,
 /// with it's causes.
@@ -74,11 +75,12 @@ pub fn format_error<E: Fail>(err: impl Borrow<E>) -> String {
 /// Handle a message error, by sending the occurred error to the user as a reply on their
 /// message along with it's causes.
 // TODO: create a future for this, delay it for a second to cool down from throttling
-pub fn handle_msg_error<E: Fail>(msg: Message, api: Api, err: impl Borrow<E>)
+pub fn handle_msg_error<E: Fail>(state: State, msg: Message, err: impl Borrow<E>)
     -> impl Future<Item = (), Error = TelegramError>
 {
     // TODO: make this timeout configurable
-    api.send_timeout(
+    state.telegram_client()
+        .send_timeout(
             msg.text_reply(format_error(err))
                 .parse_mode(ParseMode::Markdown),
             Duration::from_secs(30),
