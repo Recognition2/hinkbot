@@ -134,12 +134,11 @@ fn build_telegram_handler(state: State, handle: Handle)
 // TODO: make the interval time configurable
 fn build_stats_flusher(state: State, handle: Handle) -> impl Future<Item = (), Error = ()> {
     Interval::new(
-            Duration::from_secs(3),
+            Duration::from_secs(60),
             &handle,
         )
         .expect("failed to build stats flushing interval future")
         .for_each(move |_| {
-            println!("FLUSH");
             state.stats().flush(state.db());
             Ok(())
         })
