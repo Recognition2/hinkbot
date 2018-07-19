@@ -1,4 +1,3 @@
-extern crate chan_signal;
 extern crate chrono;
 #[macro_use]
 extern crate diesel;
@@ -13,6 +12,7 @@ extern crate lazy_static;
 extern crate regex;
 extern crate telegram_bot;
 extern crate tokio_core;
+extern crate tokio_signal;
 
 mod app;
 mod cmd;
@@ -24,18 +24,16 @@ mod state;
 mod stats;
 mod util;
 
-use std::process::exit;
-use std::thread;
 use std::time::Duration;
 
-use chan_signal::Signal;
 use dotenv::dotenv;
 use futures::{
     Future,
-    future::ok,
+    future::{ok, result},
     Stream,
 };
 use tokio_core::reactor::{Core, Handle, Interval};
+use tokio_signal::ctrl_c;
 use telegram_bot::types::UpdateKind;
 
 use msg::handler::Handler;
@@ -43,44 +41,49 @@ use util::handle_msg_error;
 use state::State;
 
 /// The application entrypoint.
+// TODO: propegate errors upto this function
 fn main() {
-    // Register signals to be identified with
-    let signal = chan_signal::notify(&[Signal::INT, Signal::TERM]);
-
     // Load the environment variables file
     dotenv().ok();
 
-    // Start the reactor
-    thread::spawn(start_reactor);
-
-    // Receive a signal to quit
-    if let Some(signal) = signal.recv() {
-        eprintln!("Received signal: {:?}", signal);
-        // TODO: flush all stats to the database before quitting
-        exit(0);
-    } else {
-        eprintln!("Failed to recieve signal");
-        exit(1);
-    }
-}
-
-/// Start the actual reactor, which will be the event loop for the Telegram API client and
-/// additional processes.
-fn start_reactor() {
     // Build a future reactor
     let mut core = Core::new().unwrap();
 
     // Initialize the global state
     let state = State::init(core.handle());
 
-    // Build a stats flusher and Telegram API updates handler future
-    let stats_flusher = build_stats_flusher(state.clone(), core.handle());
-    let telegram = build_telegram_handler(state.clone(), core.handle());
+    // Build a signal handling future to quit nicely
+    let signal = ctrl_c()
+        .flatten_stream()
+        .into_future()
+        .inspect(|_| eprintln!("Received CTRL+C signal, preparing to quit..."))
+        .map(|_| ())
+        .map_err(|_| ());
 
-    // Run the bot handling future in the reactor
-    core.run(
-        telegram.join(stats_flusher).map(|_| ()),
-    ).unwrap();
+    // Build the application, attach signal handling
+    let app = build_application(state.clone(), core.handle())
+        .select(signal)
+        .map_err(|(e, _)| e)
+        .then(|r| {
+            state.stats().flush(state.db());
+            eprintln!("Flushed stats to database");
+            eprintln!("Quitting...");
+            result(r)
+        });
+
+    // Run the application future in the reactor
+    core.run(app).unwrap();
+}
+
+/// Build the future for running the main application, which is the bot.
+fn build_application(state: State, handle: Handle)
+    -> impl Future<Item = (), Error = ()>
+{
+    let stats_flusher = build_stats_flusher(state.clone(), handle.clone());
+    let telegram = build_telegram_handler(state, handle);
+
+    telegram.join(stats_flusher)
+        .map(|_| ())
 }
 
 /// Build a future for handling Telegram API updates.
