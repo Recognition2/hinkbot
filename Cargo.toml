@@ -4,7 +4,6 @@ version = "0.0.1"
 authors = ["timvisee <timvisee@gmail.com>"]
 
 [dependencies]
-chan-signal = "0.3"
 chrono = "0.4"
 colored = "1.6"
 diesel = { version = "1.3", features = ["chrono", "mysql"] }
@@ -20,4 +19,5 @@ telegram-bot = { git = "https://github.com/telegram-rs/telegram-bot", version ="
 tokio-core = "0.1"
 tokio-io = "0.1"
 tokio-process = "0.2"
+tokio-signal = "0.2"
 tokio-timer = "0.2"
