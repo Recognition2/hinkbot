@@ -231,13 +231,26 @@ impl Stats {
             .filter(chat_id.eq(chat.to_i64()))
             .load(connection)?;
 
-        // Build a list of user totals, grouped by the user
+        // Build a hashmap of user totals, add database and queue stats
         let mut user_totals: HashMap<i64, (i32, i32)> = HashMap::new();
         for (user, num_messages, num_edits) in all_stats {
             let entry = user_totals.entry(user).or_insert((0, 0));
             entry.0 += num_messages;
             entry.1 += num_edits;
         }
+        if let Ok(ref mut queue) = self.queue.lock() {
+            if let Some(chat_queue) = queue.get(&chat) {
+                for (user, kind_stats) in chat_queue {
+                    let entry = user_totals.entry(user.to_i64()).or_insert((0, 0));
+                    for (num_messages, num_edits) in kind_stats.values() {
+                        entry.0 += *num_messages as i32;
+                        entry.1 += *num_edits as i32;
+                    }
+                }
+            }
+        }
+
+        // Build a sorted list of user totals for easier reporting
         let mut user_totals: Vec<(String, i64, i32, i32)> = user_totals
             .into_iter()
             .map(|(user, (num_messages, num_edits))|
