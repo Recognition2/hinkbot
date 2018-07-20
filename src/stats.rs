@@ -1,10 +1,14 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use chrono::NaiveDateTime;
 use diesel::{
     mysql::MysqlConnection,
     prelude::*,
-    result::Error as DieselError,
+    result::{
+        Error as DieselError,
+        QueryResult,
+    },
     self,
 };
 use telegram_bot::types::{ChatId, Message, MessageKind, UserId};
@@ -205,6 +209,107 @@ impl Stats {
                     .map(|_| ()),
             err => err.map(|_| ()),
         }
+    }
+
+    /// Fetch chat stats.
+    pub fn fetch_chat_stats(&self, connection: &MysqlConnection, chat: ChatId)
+        -> QueryResult<ChatStats>
+    {
+        use self::chat_user_stats::dsl::{
+            chat_id,
+            chat_user_stats,
+            created_at,
+            edits,
+            messages,
+            user_id,
+        };
+        //use self::diesel::dsl::sum;
+
+        // Get all message stats associated with this chat
+        let all_stats: Vec<(i64, i32, i32)> = chat_user_stats
+            .select((user_id, messages, edits))
+            .filter(chat_id.eq(chat.to_i64()))
+            .load(connection)?;
+
+        // Build a list of user totals, grouped by the user
+        let mut user_totals: HashMap<i64, (i32, i32)> = HashMap::new();
+        for (user, num_messages, num_edits) in all_stats {
+            let entry = user_totals.entry(user).or_insert((0, 0));
+            entry.0 += num_messages;
+            entry.1 += num_edits;
+        }
+        let mut user_totals: Vec<(String, i32, i32)> = user_totals
+            .into_iter()
+            .map(|(user, (num_messages, num_edits))| (format!("{}", user), num_messages, num_edits))
+            .collect();
+        user_totals.sort_unstable_by(|a, b| (b.1 + b.2).cmp(&(a.1 + a.2)));
+
+        // Get message totals for this chat
+        let total_messages = user_totals.iter().map(|(_, n, _)| n).sum();
+        let total_edits = user_totals.iter().map(|(_, _, n)| n).sum();
+
+        // Get the time we started recording stats at
+        let since = chat_user_stats
+            .select(created_at)
+            .filter(chat_id.eq(chat.to_i64()))
+            .order(created_at.asc())
+            .first::<NaiveDateTime>(connection)
+            .ok();
+
+        // Build the chat stats
+        Ok(ChatStats::new(user_totals, total_messages, total_edits, since))
+    }
+}
+
+pub struct ChatStats {
+    /// A list of users and the number of messages and edits they made.
+    /// This vector is sorted from largest to lowest number of edits.
+    users: Vec<(String, i32, i32)>,
+
+    /// The total number of messages.
+    total_messages: i32,
+
+    /// The total number of edits.
+    total_edits: i32,
+
+    /// The time since these stats were recorded.
+    since: Option<NaiveDateTime>,
+}
+
+impl ChatStats {
+    /// Constructor.
+    pub fn new(
+        users: Vec<(String, i32, i32)>,
+        total_messages: i32,
+        total_edits: i32,
+        since: Option<NaiveDateTime>,
+    ) -> Self {
+        ChatStats {
+            users,
+            total_messages,
+            total_edits,
+            since,
+        }
+    }
+
+    /// Get the user totals.
+    pub fn users(&self) -> &Vec<(String, i32, i32)> {
+        &self.users
+    }
+
+    /// Get the total number of messages
+    pub fn total_messages(&self) -> i32 {
+        self.total_messages
+    }
+
+    /// Get the total number of edits
+    pub fn total_edits(&self) -> i32 {
+        self.total_edits
+    }
+
+    /// Get the time since message stats were recorded.
+    pub fn since(&self) -> &Option<NaiveDateTime> {
+        &self.since
     }
 }
 

@@ -4,6 +4,7 @@ pub mod id;
 pub mod ping;
 pub mod risc;
 pub mod start;
+pub mod stats;
 pub mod test;
 
 use failure::{
@@ -25,6 +26,7 @@ lazy_static! {
         Box::new(self::ping::Ping::new()),
         Box::new(self::risc::Risc::new()),
         Box::new(self::start::Start::new()),
+        Box::new(self::stats::Stats::new()),
         Box::new(self::test::Test::new()),
     ];
 }
