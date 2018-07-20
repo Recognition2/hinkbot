@@ -99,7 +99,8 @@ impl Action for Stats {
         let future = state
             .telegram_send(
                 msg.text_reply(response)
-                    .parse_mode(ParseMode::Markdown),
+                    .parse_mode(ParseMode::Markdown)
+                    .disable_notification(),
             )
             .map(|_| ())
             .map_err(|err| Error::Respond(SyncFailure::new(err)))
