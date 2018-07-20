@@ -238,15 +238,17 @@ impl Stats {
             entry.0 += num_messages;
             entry.1 += num_edits;
         }
-        let mut user_totals: Vec<(String, i32, i32)> = user_totals
+        let mut user_totals: Vec<(String, i64, i32, i32)> = user_totals
             .into_iter()
-            .map(|(user, (num_messages, num_edits))| (format!("{}", user), num_messages, num_edits))
+            .map(|(user, (num_messages, num_edits))|
+                 (format!("{}", user), user, num_messages, num_edits)
+            )
             .collect();
-        user_totals.sort_unstable_by(|a, b| (b.1 + b.2).cmp(&(a.1 + a.2)));
+        user_totals.sort_unstable_by(|a, b| (b.2 + b.3).cmp(&(a.2 + a.3)));
 
         // Get message totals for this chat
-        let total_messages = user_totals.iter().map(|(_, n, _)| n).sum();
-        let total_edits = user_totals.iter().map(|(_, _, n)| n).sum();
+        let total_messages = user_totals.iter().map(|(_, _, n, _)| n).sum();
+        let total_edits = user_totals.iter().map(|(_, _, _, n)| n).sum();
 
         // Get the time we started recording stats at
         let since = chat_user_stats
@@ -264,7 +266,8 @@ impl Stats {
 pub struct ChatStats {
     /// A list of users and the number of messages and edits they made.
     /// This vector is sorted from largest to lowest number of edits.
-    users: Vec<(String, i32, i32)>,
+    /// The following format is used: `(user name, user ID, messages, edits)`.
+    users: Vec<(String, i64, i32, i32)>,
 
     /// The total number of messages.
     total_messages: i32,
@@ -279,7 +282,7 @@ pub struct ChatStats {
 impl ChatStats {
     /// Constructor.
     pub fn new(
-        users: Vec<(String, i32, i32)>,
+        users: Vec<(String, i64, i32, i32)>,
         total_messages: i32,
         total_edits: i32,
         since: Option<NaiveDateTime>,
@@ -293,7 +296,7 @@ impl ChatStats {
     }
 
     /// Get the user totals.
-    pub fn users(&self) -> &Vec<(String, i32, i32)> {
+    pub fn users(&self) -> &Vec<(String, i64, i32, i32)> {
         &self.users
     }
 

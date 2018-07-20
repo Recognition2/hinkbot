@@ -65,10 +65,10 @@ impl Action for Stats {
             let totals: Vec<String> = stats.users()
                 .iter()
                 .enumerate()
-                .map(|(i, (user, messages, edits))| if *edits > 0 {
-                    format!("_{}._ {}: _{} ({})_", i + 1, user, messages, edits)
+                .map(|(i, (user, user_id, messages, edits))| if *edits > 0 {
+                    format!("{}. [{}](tg://user?id={}): _{} ({})_", i + 1, user, user_id, messages, edits)
                 } else {
-                    format!("_{}._ {}: _{}_", i + 1, user, messages)
+                    format!("{}. [{}](tg://user?id={}): _{}_", i + 1, user, user_id, messages)
                 })
                 .collect();
             response += &totals.join("\n");
