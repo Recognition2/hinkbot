@@ -181,7 +181,7 @@ impl Stats {
     ) -> Result<(), DieselError> {
         // Find an existing entry in the database and update it, or create a new entry
         match chat_user_stats::dsl::chat_user_stats
-            .find((chat.to_i64(), user.to_i64(), message_type.to_id()))
+            .find((chat.to_i64(), user.to_i64(), message_type.id()))
             .first::<ChatUserStats>(connection)
         {
             Ok(existing) =>
@@ -197,7 +197,7 @@ impl Stats {
                     .values((
                         chat_user_stats::dsl::chat_id.eq(chat.to_i64()),
                         chat_user_stats::dsl::user_id.eq(user.to_i64()),
-                        chat_user_stats::dsl::message_type.eq(message_type.to_id()),
+                        chat_user_stats::dsl::message_type.eq(message_type.id()),
                         chat_user_stats::dsl::messages.eq(messages as i32),
                         chat_user_stats::dsl::edits.eq(edits as i32),
                     ))
@@ -234,7 +234,7 @@ impl StatsKind {
     /// Get the stats kind for the given message kind.
     /// Some kinds do not have a corresponding stats kind, `None` will be returned for these.
     fn from_message(message: &Message) -> Option<Self> {
-        // Check whether this message was forwarded\
+        // Check whether this message was forwarded
         if message.forward.is_some() {
             return Some(StatsKind::Forward);
         }
@@ -311,7 +311,7 @@ impl StatsKind {
     }
 
     /// Get the corresponding ID for the stats kind.
-    pub fn to_id(&self) -> i16 {
+    pub fn id(&self) -> i16 {
         match self {
             StatsKind::Text => 1,
             StatsKind::Command => 2,
@@ -330,6 +330,29 @@ impl StatsKind {
             StatsKind::ChatPhoto => 15,
             StatsKind::PinnedMessage => 16,
             StatsKind::Forward => 17,
+        }
+    }
+
+    /// Get the name for the current stats kind.
+    pub fn name(&self) -> &'static str {
+        match self {
+            StatsKind::Text => "text message",
+            StatsKind::Command => "command",
+            StatsKind::Audio => "audio message",
+            StatsKind::Document => "document",
+            StatsKind::Gif => "GIF",
+            StatsKind::Photo => "photo",
+            StatsKind::Sticker => "sticker",
+            StatsKind::Video => "video",
+            StatsKind::Voice => "voice message",
+            StatsKind::VideoNote => "video note",
+            StatsKind::Contact => "contact",
+            StatsKind::Location => "location",
+            StatsKind::Venue => "venue",
+            StatsKind::ChatTitle => "changed chat title",
+            StatsKind::ChatPhoto => "changed chat photo",
+            StatsKind::PinnedMessage => "pinned",
+            StatsKind::Forward => "forwarded",
         }
     }
 }

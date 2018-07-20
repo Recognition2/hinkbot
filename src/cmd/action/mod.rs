@@ -15,6 +15,20 @@ use telegram_bot::types::Message;
 
 use state::State;
 
+lazy_static! {
+    /// A list of all available and invokable actions.
+    /// This list includes hidden actions which may be filtered using the `.hidden()` propery.
+    pub(crate) static ref ACTIONS: Vec<Box<dyn Action + Sync>> = vec![
+        Box::new(self::exec::Exec::new()),
+        Box::new(self::help::Help::new()),
+        Box::new(self::id::Id::new()),
+        Box::new(self::ping::Ping::new()),
+        Box::new(self::risc::Risc::new()),
+        Box::new(self::start::Start::new()),
+        Box::new(self::test::Test::new()),
+    ];
+}
+
 pub trait Action {
     /// Get the command name for this action.
     ///

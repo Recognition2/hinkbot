@@ -12,8 +12,10 @@ use telegram_bot::{
 };
 
 use state::State;
-use super::Action;
-use super::super::handler::ACTIONS;
+use super::{
+    Action,
+    ACTIONS,
+};
 
 /// The action command name.
 const CMD: &'static str = "help";
