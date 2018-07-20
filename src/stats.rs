@@ -358,7 +358,11 @@ impl Stats {
             .into_iter()
             .map(|(user, (first, _, num_messages, num_edits))| (
                 if let Some(first) = first {
-                        first
+                        if first.is_empty() {
+                            format!("{}", user)
+                        } else {
+                            first
+                        }
                     } else {
                         format!("{}", user)
                     },
