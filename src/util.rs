@@ -1,7 +1,6 @@
 extern crate colored;
 
 use std::borrow::Borrow;
-use std::time::Duration;
 
 use failure::Fail;
 use futures::Future;
@@ -78,12 +77,9 @@ pub fn format_error<E: Fail>(err: impl Borrow<E>) -> String {
 pub fn handle_msg_error<E: Fail>(state: State, msg: Message, err: impl Borrow<E>)
     -> impl Future<Item = (), Error = TelegramError>
 {
-    // TODO: make this timeout configurable
-    state.telegram_client()
-        .send_timeout(
+    state.telegram_send(
             msg.text_reply(format_error(err))
                 .parse_mode(ParseMode::Markdown),
-            Duration::from_secs(30),
         )
         .map(|_| ())
 }

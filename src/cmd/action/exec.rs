@@ -147,17 +147,13 @@ impl Action for Exec {
             // Provide the user with feedback if no command is entered
             if cmd.trim().is_empty() {
                 // Build a future for sending the help message
-                // TODO: make this timeout configurable
-                let future = state
-                    .telegram_client()
-                    .send_timeout(
+                let future = state.telegram_send(
                         msg.text_reply("\
                                 Please provide a command to run.\n\
                                 \n\
                                 For example:\n\
                                 `/exec echo Hello!`\
                             ").parse_mode(ParseMode::Markdown),
-                        Duration::from_secs(10),
                     )
                     .map(|_| ())
                     .map_err(|err| Error::Help(SyncFailure::new(err)))
@@ -182,8 +178,6 @@ impl Action for Exec {
 /// An object that tracks the status of an executed command.
 /// This object also holds the status message present in a Telegram group to update when the status
 /// changes, along with the global state.
-// TODO: detect timeouts
-// TODO: report execution times
 pub struct ExecStatus {
     /// The actual output.
     output: String,
@@ -226,13 +220,10 @@ impl ExecStatus {
     pub fn create_status_msg(state: State, msg: &Message)
         -> impl Future<Item = Self, Error = Error>
     {
-        // TODO: make this timeout configurable
         // TODO: handle the Telegram errors properly
-        state.telegram_client()
-            .send_timeout(
+        state.telegram_send(
                 msg.text_reply("<i>Executing command...</i>")
                     .parse_mode(ParseMode::Html),
-                Duration::from_secs(10),
             )
             .map_err(|err| -> FailureError { SyncFailure::new(err).into() })
             .map_err(|err| Error::StatusMessage(err.compat()))
@@ -397,12 +388,11 @@ impl ExecStatus {
     // TODO: should we return a future for updating, to allow catching errors?
     pub fn update_status_msg(&mut self) {
         // Spawn a future to edit the status message with the newest build status text
-        self.state.telegram_client()
-            .spawn(
-                self.status_msg
-                    .edit_text(self.build_status_msg())
-                    .parse_mode(ParseMode::Html)
-            );
+        self.state.telegram_spawn(
+            self.status_msg
+                .edit_text(self.build_status_msg())
+                .parse_mode(ParseMode::Html),
+        );
 
         // Reset the changed status
         self.changed = false;

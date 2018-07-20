@@ -875,12 +875,9 @@ impl Action for Id {
         let state = state.clone();
 
         // Build a future to send a temporary response to claim an ID for the answer message
-        // TODO: make this timeout configurable
-        let response = state.telegram_client()
-            .send_timeout(
+        let response = state.telegram_send(
                 msg.text_reply("_Gathering facts..._")
                     .parse_mode(ParseMode::Markdown),
-                Duration::from_secs(10),
             )
             .map_err(|err| -> FailureError { SyncFailure::new(err).into() })
             .map_err(|err| Error::GatherFacts(err.compat()))
@@ -922,13 +919,10 @@ impl Action for Id {
                 }
 
                 // Build a future to update the temporary message with the actual ID response
-                // TODO: make this timeout configurable
-                state.telegram_client()
-                    .send_timeout(
+                state.telegram_send(
                         msg_answer.edit_text(info.join("\n\n"))
                             .parse_mode(ParseMode::Markdown)
                             .disable_preview(),
-                        Duration::from_secs(10),
                     )
                     .map(|_| ())
                     .map_err(|err| Error::Respond(SyncFailure::new(err)))

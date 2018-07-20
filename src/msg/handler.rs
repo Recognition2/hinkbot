@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use failure::SyncFailure;
 use futures::{
     Future,
@@ -105,14 +103,11 @@ impl Handler {
             .collect();
 
         // Send a response
-        // TODO: make timeout configurable
         Some(
-            state.telegram_client()
-                .send_timeout(
+            state.telegram_send(
                     msg.text_reply(reddits.join("\n"))
                         .parse_mode(ParseMode::Markdown)
                         .disable_notification(),
-                    Duration::from_secs(10),
                 )
                 .map(|_| ())
                 .map_err(|err| Error::HandleReddit(SyncFailure::new(err)))
@@ -124,15 +119,12 @@ impl Handler {
         -> impl Future<Item = (), Error = Error>
     {
         // Send a message to the user
-        // TODO: make timeout configurable
-        state.telegram_client()
-            .send_timeout(
+        state.telegram_send(
                 msg.text_reply(format!(
                         "`BLEEP BLOOP`\n`I AM A BOT`\n\n{}, direct messages are not supported yet.",
                         msg.from.first_name,
                     ))
                     .parse_mode(ParseMode::Markdown),
-                Duration::from_secs(10),
             )
             .map(|_| ())
             .map_err(|err| Error::HandlePrivate(SyncFailure::new(err)))
