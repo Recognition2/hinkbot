@@ -212,29 +212,33 @@ impl Stats {
     }
 
     /// Fetch chat stats.
-    pub fn fetch_chat_stats(&self, connection: &MysqlConnection, chat: ChatId)
-        -> QueryResult<ChatStats>
-    {
+    pub fn fetch_chat_stats(
+        &self,
+        connection: &MysqlConnection,
+        chat: ChatId,
+        user: Option<UserId>,
+    ) -> QueryResult<ChatStats> {
         use self::chat_user_stats::dsl::{
             chat_id,
             chat_user_stats,
             created_at,
             edits,
+            message_type,
             messages,
             user_id,
         };
         //use self::diesel::dsl::sum;
 
         // Get all message stats associated with this chat
-        let all_stats: Vec<(i64, i32, i32)> = chat_user_stats
-            .select((user_id, messages, edits))
+        let all_stats: Vec<(i64, i16, i32, i32)> = chat_user_stats
+            .select((user_id, message_type, messages, edits))
             .filter(chat_id.eq(chat.to_i64()))
             .load(connection)?;
 
         // Build a hashmap of user totals, add database and queue stats
         let mut user_totals: HashMap<i64, (i32, i32)> = HashMap::new();
-        for (user, num_messages, num_edits) in all_stats {
-            let entry = user_totals.entry(user).or_insert((0, 0));
+        for (user, _, num_messages, num_edits) in &all_stats {
+            let entry = user_totals.entry(*user).or_insert((0, 0));
             entry.0 += num_messages;
             entry.1 += num_edits;
         }
@@ -250,6 +254,39 @@ impl Stats {
             }
         }
 
+        // Build a hashmap of user specific stats, add database and queue stats
+        let mut user_specifics: HashMap<StatsKind, (i32, i32)> = HashMap::new();
+        if let Some(ref selected_user) = user {
+            for (user, kind, num_messages, num_edits) in all_stats {
+                // Ignore other users
+                if user != selected_user.to_i64() {
+                    continue;
+                }
+
+                // Parse the kind, ignore unknown
+                let kind = match StatsKind::from_id(kind) {
+                    Some(kind) => kind,
+                    None => continue,
+                };
+
+                // Append stats
+                let entry = user_specifics.entry(kind).or_insert((0, 0));
+                entry.0 += num_messages;
+                entry.1 += num_edits;
+            }
+            if let Ok(ref mut queue) = self.queue.lock() {
+                if let Some(chat_queue) = queue.get(&chat) {
+                    if let Some(kind_stats) = chat_queue.get(selected_user) {
+                        for (kind, (num_messages, num_edits)) in kind_stats {
+                            let entry = user_specifics.entry(*kind).or_insert((0, 0));
+                            entry.0 += *num_messages as i32;
+                            entry.1 += *num_edits as i32;
+                        }
+                    }
+                }
+            }
+        }
+
         // Build a sorted list of user totals for easier reporting
         let mut user_totals: Vec<(String, i64, i32, i32)> = user_totals
             .into_iter()
@@ -258,6 +295,19 @@ impl Stats {
             )
             .collect();
         user_totals.sort_unstable_by(|a, b| (b.2 + b.3).cmp(&(a.2 + a.3)));
+
+        // Build a sorted list of user specifics for easier reporting
+        let user_specifics = if !user_specifics.is_empty() {
+            let mut user_specifics: Vec<(StatsKind, i32, i32)> = user_specifics
+                .into_iter()
+                .filter(|(_, (num_messages, num_edits))| num_messages + num_edits > 0)
+                .map(|(kind, (num_messages, num_edits))| (kind, num_messages, num_edits))
+                .collect();
+            user_specifics.sort_unstable_by(|a, b| (b.1 + b.2).cmp(&(a.1 + a.2)));
+            Some(user_specifics)
+        } else {
+            None
+        };
 
         // Get message totals for this chat
         let total_messages = user_totals.iter().map(|(_, _, n, _)| n).sum();
@@ -272,7 +322,7 @@ impl Stats {
             .ok();
 
         // Build the chat stats
-        Ok(ChatStats::new(user_totals, total_messages, total_edits, since))
+        Ok(ChatStats::new(user_totals, user_specifics, total_messages, total_edits, since))
     }
 }
 
@@ -281,6 +331,11 @@ pub struct ChatStats {
     /// This vector is sorted from largest to lowest number of edits.
     /// The following format is used: `(user name, user ID, messages, edits)`.
     users: Vec<(String, i64, i32, i32)>,
+
+    /// A list of user specific stats if a user was given.
+    /// This vector is sorted from the largest to the lowest number for each stats kind.
+    /// Stat kinds without any messages or edits are omitted.
+    specific: Option<Vec<(StatsKind, i32, i32)>>,
 
     /// The total number of messages.
     total_messages: i32,
@@ -296,12 +351,14 @@ impl ChatStats {
     /// Constructor.
     pub fn new(
         users: Vec<(String, i64, i32, i32)>,
+        specific: Option<Vec<(StatsKind, i32, i32)>>,
         total_messages: i32,
         total_edits: i32,
         since: Option<NaiveDateTime>,
     ) -> Self {
         ChatStats {
             users,
+            specific,
             total_messages,
             total_edits,
             since,
@@ -311,6 +368,11 @@ impl ChatStats {
     /// Get the user totals.
     pub fn users(&self) -> &Vec<(String, i64, i32, i32)> {
         &self.users
+    }
+
+    /// Get the user specific stats if given.
+    pub fn specific(&self) -> &Option<Vec<(StatsKind, i32, i32)>> {
+        &self.specific
     }
 
     /// Get the total number of messages
@@ -408,7 +470,7 @@ impl StatsKind {
 
     /// Get the stats kind for the given ID.
     /// If the given ID is invalid, `None` is returned.
-    pub fn _from_id(&self, id: i16) -> Option<StatsKind> {
+    pub fn from_id(id: i16) -> Option<StatsKind> {
         match id {
             1 => Some(StatsKind::Text),
             2 => Some(StatsKind::Command),

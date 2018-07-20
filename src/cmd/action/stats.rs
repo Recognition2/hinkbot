@@ -51,7 +51,7 @@ impl Action for Stats {
         // Fetch the chat message stats
         let stats = match state
             .stats()
-            .fetch_chat_stats(state.db(), msg.chat.id())
+            .fetch_chat_stats(state.db(), msg.chat.id(), Some(msg.from.id))
         {
             Ok(stats) => stats,
             Err(e) => return Box::new(err(e.into())),
@@ -61,19 +61,29 @@ impl Action for Stats {
         let mut response = String::from("*Messages (edits):*\n");
 
         // Append the user totals
-        if !stats.users().is_empty() {
-            let totals: Vec<String> = stats.users()
+        let totals: Vec<String> = stats.users()
+            .iter()
+            .enumerate()
+            .map(|(i, (user, user_id, messages, edits))| if *edits > 0 {
+                format!("{}. [{}](tg://user?id={}): _{} ({})_", i + 1, user, user_id, messages, edits)
+            } else {
+                format!("{}. [{}](tg://user?id={}): _{}_", i + 1, user, user_id, messages)
+            })
+            .collect();
+        response += &totals.join("\n");
+
+        // Append the user specifics if available
+        if let Some(specific) = stats.specific() {
+            response += "\n\n*Your messages (edits):*\n";
+            let specific: Vec<String> = specific
                 .iter()
-                .enumerate()
-                .map(|(i, (user, user_id, messages, edits))| if *edits > 0 {
-                    format!("{}. [{}](tg://user?id={}): _{} ({})_", i + 1, user, user_id, messages, edits)
+                .map(|(kind, messages, edits)| if *edits > 0 {
+                    format!("{}s: _{} ({})_", ucfirst(kind.name()), messages, edits)
                 } else {
-                    format!("{}. [{}](tg://user?id={}): _{}_", i + 1, user, user_id, messages)
+                    format!("{}s: _{}_", ucfirst(kind.name()), messages)
                 })
                 .collect();
-            response += &totals.join("\n");
-        } else {
-            response += "_No user stats yet_";
+            response += &specific.join("\n");
         }
 
         // Add other stats
@@ -119,4 +129,16 @@ impl From<DieselError> for Error {
     fn from(err: DieselError) -> Error {
         Error::FetchStats(err)
     }
+}
+
+/// Uppercase the first character.
+fn ucfirst(string: &str) -> String {
+    string.chars()
+        .enumerate()
+        .filter_map(|(i, c)| if i == 0 {
+                c.to_uppercase().next()
+            } else {
+                Some(c)
+            })
+        .collect()
 }
