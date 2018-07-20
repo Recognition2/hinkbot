@@ -30,18 +30,16 @@ impl Stats {
     /// If the given message kind is not a counted stat, nothing happends.
     pub fn increase_stats(
         &self,
-        chat: ChatId,
-        user: UserId,
-        kind: &MessageKind,
+        message: &Message,
         messages: u32,
         edits: u32,
     ) {
-        if let Some(message_type) = StatsKind::from_message_kind(kind) {
+        if let Some(message_type) = StatsKind::from_message(message) {
             match self.queue.lock() {
                 Ok(ref mut queue) => {
-                    let entry = queue.entry(chat)
+                    let entry = queue.entry(message.chat.id())
                         .or_insert(HashMap::new())
-                        .entry(user)
+                        .entry(message.from.id)
                         .or_insert(HashMap::new())
                         .entry(message_type)
                         .or_insert((0, 0));
@@ -57,7 +55,7 @@ impl Stats {
     /// The update is pushed to the queue, to be pushed to the database periodically.
     /// If the given message kind is not a counted stat, nothing happends.
     pub fn increase_message_stats(&self, message: &Message, messages: u32, edits: u32) {
-        self.increase_stats(message.chat.id(), message.from.id, &message.kind, messages, edits);
+        self.increase_stats(message, messages, edits);
     }
 
     /// Flush the queue with stats to the database.
@@ -229,13 +227,20 @@ pub enum StatsKind {
     ChatTitle,
     ChatPhoto,
     PinnedMessage,
+    Forward,
 }
 
 impl StatsKind {
     /// Get the stats kind for the given message kind.
     /// Some kinds do not have a corresponding stats kind, `None` will be returned for these.
-    fn from_message_kind(kind: &MessageKind) -> Option<Self> {
-        match kind {
+    fn from_message(message: &Message) -> Option<Self> {
+        // Check whether this message was forwarded\
+        if message.forward.is_some() {
+            return Some(StatsKind::Forward);
+        }
+
+        // Determine the stats kind based on the message kind
+        match &message.kind {
             MessageKind::Text { data, .. } => if data.trim_left().starts_with('/') {
                     Some(StatsKind::Command)
                 } else {
@@ -300,6 +305,7 @@ impl StatsKind {
             14 => Some(StatsKind::ChatTitle),
             15 => Some(StatsKind::ChatPhoto),
             16 => Some(StatsKind::PinnedMessage),
+            17 => Some(StatsKind::Forward),
             _ => None,
         }
     }
@@ -323,6 +329,7 @@ impl StatsKind {
             StatsKind::ChatTitle => 14,
             StatsKind::ChatPhoto => 15,
             StatsKind::PinnedMessage => 16,
+            StatsKind::Forward => 17,
         }
     }
 }
