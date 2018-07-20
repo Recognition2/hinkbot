@@ -6,31 +6,10 @@ use regex::Regex;
 use telegram_bot::types::Message;
 
 use state::State;
-use super::action::{
-    Action,
-    Error as ActionError,
-};
-use super::action::exec::Exec;
-use super::action::help::Help;
-use super::action::id::Id;
-use super::action::ping::Ping;
-use super::action::risc::Risc;
-use super::action::start::Start;
-use super::action::test::Test;
+use super::action::Error as ActionError;
+use super::action::ACTIONS;
 
 lazy_static! {
-    /// A list of all available and invokable actions.
-    /// This list includes hidden actions which may be filtered using the `.hidden()` propery.
-    pub static ref ACTIONS: Vec<Box<dyn Action + Sync>> = vec![
-        Box::new(Exec::new()),
-        Box::new(Help::new()),
-        Box::new(Id::new()),
-        Box::new(Ping::new()),
-        Box::new(Risc::new()),
-        Box::new(Start::new()),
-        Box::new(Test::new()),
-    ];
-
     /// A regex for matching messages that contain a command.
     static ref CMD_REGEX: Regex = Regex::new(
         r"^/(?is)([A-Z0-9_]+)(@[A-Z0-9_]+)?(\s.*$|$)",
