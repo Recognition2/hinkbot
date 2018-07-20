@@ -19,6 +19,10 @@ use schema::{chat, chat_user_stats, user};
 pub struct Stats {
     /// A queue of stats that still needs to be pushed to the database.
     queue: Mutex<HashMap<ChatId, HashMap<UserId, HashMap<StatsKind, (u32, u32)>>>>,
+
+    /// A queue of user names for recent messages, these should be updated in the database if
+    /// changed.
+    queue_names: Mutex<HashMap<UserId, (String, Option<String>)>>,
 }
 
 impl Stats {
@@ -26,6 +30,7 @@ impl Stats {
     pub fn new() -> Stats {
         Stats {
             queue: Mutex::new(HashMap::new()),
+            queue_names: Mutex::new(HashMap::new()),
         }
     }
 
@@ -38,6 +43,7 @@ impl Stats {
         messages: u32,
         edits: u32,
     ) {
+        // Update the stats
         if let Some(message_type) = StatsKind::from_message(message) {
             match self.queue.lock() {
                 Ok(ref mut queue) => {
@@ -53,6 +59,18 @@ impl Stats {
                 Err(_) => eprintln!("ERR: failed lock stats queue, unable to increase user stats"),
             }
         }
+
+        // Add the name of the user to the names queue
+        match self.queue_names.lock() {
+            Ok(ref mut names) => {
+                names.entry(message.from.id)
+                    .or_insert((
+                        message.from.first_name.clone(),
+                        message.from.last_name.to_owned()
+                    ));
+            },
+            Err(_) => eprintln!("ERR: failed lock stats queue, unable to increase user stats"),
+        }
     }
 
     /// Increase the total message and edits count for the given message.
@@ -66,9 +84,10 @@ impl Stats {
     /// Items successfully pushed to the database are cleared from the queue.
     /// Any errors while flushing are reported in the console.
     pub fn flush(&self, connection: &MysqlConnection) {
-        match self.queue.lock() {
-            Ok(ref mut chats) => Self::flush_chats(chats, connection),
-            Err(err) => eprintln!("ERR: failed lock stats queue, unable to flush to database: {}", err),
+        match (self.queue.lock(), self.queue_names.lock()) {
+            (Ok(ref mut chats), Ok(ref mut names)) => Self::flush_chats(chats, names, connection),
+            (Err(err), _) => eprintln!("ERR: failed lock stats queue, unable to flush to database: {}", err),
+            (_, Err(err)) => eprintln!("ERR: failed lock stats names queue, unable to flush to database: {}", err),
         }
     }
 
@@ -77,6 +96,7 @@ impl Stats {
     /// Any errors while flushing are reported in the console.
     pub fn flush_chats(
         chats: &mut HashMap<ChatId, HashMap<UserId, HashMap<StatsKind, (u32, u32)>>>,
+        names: &mut HashMap<UserId, (String, Option<String>)>,
         connection: &MysqlConnection,
     ) {
         // Flush each chat, remove the successfully flushed
@@ -104,7 +124,7 @@ impl Stats {
             }
 
             // Flush all users for this chat to the database
-            Self::flush_users(*chat, users, connection);
+            Self::flush_users(*chat, users, names, connection);
 
             // Remove the chat entry if the users list is now empty
             !users.is_empty()
@@ -118,26 +138,57 @@ impl Stats {
     pub fn flush_users(
         chat: ChatId,
         users: &mut HashMap<UserId, HashMap<StatsKind, (u32, u32)>>,
+        names: &mut HashMap<UserId, (String, Option<String>)>,
         connection: &MysqlConnection,
     ) {
         // Flush all users in this chat, remove successfully flushed
         users.retain(|user, stats| {
             // Find an existing entry in the database and update it, or create a new entry
             match user::dsl::user.find(user.to_i64()).first::<User>(connection) {
-                Ok(mut _existing) => {
-                    // TODO: update if the name changed
-                    // diesel::update(&existing)
-                    //     .set((first_name.eq("First name"), last_name.eq("Last name")))
-                    //     .execute(connection);
+                Ok(existing) => {
+                    // Update the existing user if details changed
+                    if let Some((first, last)) = names.get(user) {
+                        if *first != existing.first_name || *last != existing.last_name {
+                            if let Err(err) = diesel::update(&existing)
+                                .set((
+                                    user::dsl::first_name.eq(first),
+                                    user::dsl::last_name.eq(last),
+                                ))
+                                .execute(connection)
+                            {
+                                eprintln!("ERR: failed to update name of queued user in database, skipping: {}", err);
+                                return true;
+                            }
+                        }
+                    }
+
+                    // Remove the name from the list
+                    names.remove(user);
                 },
-                Err(DieselError::NotFound) =>
-                    if let Err(err) = diesel::insert_into(user::dsl::user)
-                        .values(user::dsl::telegram_id.eq(user.to_i64()))
-                        .execute(connection)
-                    {
+                Err(DieselError::NotFound) => {
+                    // Insert the user into the database, with it's name if known
+                    let result = if let Some(name) = names.get(user) {
+                        diesel::insert_into(user::dsl::user)
+                            .values((
+                                user::dsl::telegram_id.eq(user.to_i64()),
+                                user::dsl::first_name.eq(name.0.clone()),
+                                user::dsl::last_name.eq(name.1.clone()),
+                            ))
+                            .execute(connection)
+                    } else {
+                        diesel::insert_into(user::dsl::user)
+                            .values(user::dsl::telegram_id.eq(user.to_i64()))
+                            .execute(connection)
+                    };
+
+                    if let Err(err) = result {
                         eprintln!("ERR: failed to create queued user in database, skipping: {}", err);
                         return true;
-                    },
+                    }
+
+                    // Remove the name from the list
+                    names.remove(user);
+                },
                 Err(err) => {
                     eprintln!("ERR: failed to check if queued user exists in the database, skipping: {}", err);
                     return true;
@@ -215,8 +266,8 @@ impl Stats {
     pub fn fetch_chat_stats(
         &self,
         connection: &MysqlConnection,
-        chat: ChatId,
-        user: Option<UserId>,
+        selected_chat: ChatId,
+        selected_user: Option<UserId>,
     ) -> QueryResult<ChatStats> {
         use self::chat_user_stats::dsl::{
             chat_id,
@@ -227,28 +278,43 @@ impl Stats {
             messages,
             user_id,
         };
-        //use self::diesel::dsl::sum;
+        use self::user::dsl::{first_name, last_name};
 
         // Get all message stats associated with this chat
-        let all_stats: Vec<(i64, i16, i32, i32)> = chat_user_stats
-            .select((user_id, message_type, messages, edits))
-            .filter(chat_id.eq(chat.to_i64()))
+        // TODO: do a left join instead
+        let all_stats: Vec<(i64, String, Option<String>, i16, i32, i32)> = chat_user_stats
+            .inner_join(user::table)
+            .select((user_id, first_name, last_name, message_type, messages, edits))
+            .filter(chat_id.eq(selected_chat.to_i64()))
             .load(connection)?;
 
         // Build a hashmap of user totals, add database and queue stats
-        let mut user_totals: HashMap<i64, (i32, i32)> = HashMap::new();
-        for (user, _, num_messages, num_edits) in &all_stats {
-            let entry = user_totals.entry(*user).or_insert((0, 0));
-            entry.0 += num_messages;
-            entry.1 += num_edits;
+        let mut user_totals: HashMap<i64, (Option<String>, Option<String>, i32, i32)> = HashMap::new();
+        for (user, first, last, _, num_messages, num_edits) in &all_stats {
+            let entry = user_totals.entry(*user).or_insert((None, None, 0, 0));
+            entry.0 = Some(first.clone());
+            entry.1 = last.clone();
+            entry.2 += num_messages;
+            entry.3 += num_edits;
         }
         if let Ok(ref mut queue) = self.queue.lock() {
-            if let Some(chat_queue) = queue.get(&chat) {
+            if let Some(chat_queue) = queue.get(&selected_chat) {
                 for (user, kind_stats) in chat_queue {
-                    let entry = user_totals.entry(user.to_i64()).or_insert((0, 0));
+                    // Get the name from the name queue if available
+                    let name = self.queue_names
+                        .lock()
+                        .ok()
+                        .and_then(|names| names.get(user).cloned());
+
+                    // Get the entry and update it
+                    let entry = user_totals.entry(user.to_i64()).or_insert((None, None, 0, 0));
                     for (num_messages, num_edits) in kind_stats.values() {
-                        entry.0 += *num_messages as i32;
-                        entry.1 += *num_edits as i32;
+                        if let Some((first, last)) = &name {
+                            entry.0 = Some(first.clone());
+                            entry.1 = last.clone();
+                        }
+                        entry.2 += *num_messages as i32;
+                        entry.3 += *num_edits as i32;
                     }
                 }
             }
@@ -256,8 +322,8 @@ impl Stats {
 
         // Build a hashmap of user specific stats, add database and queue stats
         let mut user_specifics: HashMap<StatsKind, (i32, i32)> = HashMap::new();
-        if let Some(ref selected_user) = user {
-            for (user, kind, num_messages, num_edits) in all_stats {
+        if let Some(ref selected_user) = selected_user {
+            for (user, _, _, kind, num_messages, num_edits) in all_stats {
                 // Ignore other users
                 if user != selected_user.to_i64() {
                     continue;
@@ -275,7 +341,7 @@ impl Stats {
                 entry.1 += num_edits;
             }
             if let Ok(ref mut queue) = self.queue.lock() {
-                if let Some(chat_queue) = queue.get(&chat) {
+                if let Some(chat_queue) = queue.get(&selected_chat) {
                     if let Some(kind_stats) = chat_queue.get(selected_user) {
                         for (kind, (num_messages, num_edits)) in kind_stats {
                             let entry = user_specifics.entry(*kind).or_insert((0, 0));
@@ -290,9 +356,16 @@ impl Stats {
         // Build a sorted list of user totals for easier reporting
         let mut user_totals: Vec<(String, i64, i32, i32)> = user_totals
             .into_iter()
-            .map(|(user, (num_messages, num_edits))|
-                 (format!("{}", user), user, num_messages, num_edits)
-            )
+            .map(|(user, (first, _, num_messages, num_edits))| (
+                if let Some(first) = first {
+                        first
+                    } else {
+                        format!("{}", user)
+                    },
+                user,
+                num_messages,
+                num_edits,
+            ))
             .collect();
         user_totals.sort_unstable_by(|a, b| (b.2 + b.3).cmp(&(a.2 + a.3)));
 
@@ -316,7 +389,7 @@ impl Stats {
         // Get the time we started recording stats at
         let since = chat_user_stats
             .select(created_at)
-            .filter(chat_id.eq(chat.to_i64()))
+            .filter(chat_id.eq(selected_chat.to_i64()))
             .order(created_at.asc())
             .first::<NaiveDateTime>(connection)
             .ok();
@@ -326,6 +399,7 @@ impl Stats {
     }
 }
 
+/// An object holding stats for a chat and optionally for a user.
 pub struct ChatStats {
     /// A list of users and the number of messages and edits they made.
     /// This vector is sorted from largest to lowest number of edits.
@@ -535,7 +609,7 @@ impl StatsKind {
             StatsKind::ChatTitle => "changed chat title",
             StatsKind::ChatPhoto => "changed chat photo",
             StatsKind::PinnedMessage => "pinned",
-            StatsKind::Forward => "forwarded",
+            StatsKind::Forward => "forward",
         }
     }
 }
