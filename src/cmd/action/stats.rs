@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use diesel::result::Error as DieselError;
 use failure::{
     Error as FailureError,
@@ -98,12 +96,10 @@ impl Action for Stats {
         }
 
         // Build a message future for sending the response
-        // TODO: make this time configurable
-        let future = state.telegram_client()
-            .send_timeout(
+        let future = state
+            .telegram_send(
                 msg.text_reply(response)
                     .parse_mode(ParseMode::Markdown),
-                Duration::from_secs(10),
             )
             .map(|_| ())
             .map_err(|err| Error::Respond(SyncFailure::new(err)))

@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use failure::{
     Error as FailureError,
     SyncFailure,
@@ -48,12 +46,9 @@ impl Action for Test {
         -> Box<Future<Item = (), Error = FailureError>>
     {
         // Build a future for sending the response message
-        // TODO: make the timeout configurable
-        let future = state.telegram_client()
-            .send_timeout(
+        let future = state.telegram_send(
                 msg.text_reply("<i>Jep... works on my machine!</i>")
                     .parse_mode(ParseMode::Html),
-                Duration::from_secs(10),
             )
             .map(|_| ())
             .map_err(|err| Error::Respond(SyncFailure::new(err)))

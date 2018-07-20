@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use failure::{
     Error as FailureError,
     SyncFailure,
@@ -63,15 +61,12 @@ impl Action for Help {
         let cmd_list = cmds.join("\n");
 
         // Build a future for sending the response help message
-        // TODO: make this timeout configurable
-        let future = state.telegram_client()
-            .send_timeout(
+        let future = state.telegram_send(
                 msg.text_reply(format!(
                         "*RISC commands:*\n{}",
                         cmd_list,
                     ))
                     .parse_mode(ParseMode::Markdown),
-                Duration::from_secs(10),
             )
             .map(|_| ())
             .map_err(|err| Error::Respond(SyncFailure::new(err)))

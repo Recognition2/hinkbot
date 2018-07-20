@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use failure::{
     Error as FailureError,
     SyncFailure,
@@ -48,12 +46,8 @@ impl Action for Ping {
         -> Box<Future<Item = (), Error = FailureError>>
     {
         // Build a message future for sending the response
-        // TODO: make this time configurable
-        let future = state.telegram_client()
-            .send_timeout(
-                msg.text_reply("Pong!"),
-                Duration::from_secs(10),
-            )
+        let future = state
+            .telegram_send(msg.text_reply("Pong!"))
             .map(|_| ())
             .map_err(|err| Error::Respond(SyncFailure::new(err)))
             .from_err();

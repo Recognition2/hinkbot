@@ -1,11 +1,17 @@
 use std::env;
 use std::rc::Rc;
+use std::time::Duration;
 
 use diesel::{
     mysql::MysqlConnection,
     prelude::*,
 };
-use telegram_bot::Api;
+use futures::Future;
+use telegram_bot::{
+    Api,
+    Error as TelegramError,
+    types::{JsonIdResponse, Message, Request},
+};
 use tokio_core::reactor::Handle;
 
 use stats::Stats;
@@ -30,8 +36,8 @@ impl State {
     /// A handle to the Tokio core reactor must be given to `reactor`.
     pub fn init(reactor: Handle) -> State {
         State {
-            telegram_client: Self::create_telegram_client(reactor),
-            inner: Rc::new(StateInner::init()),
+            telegram_client: Self::create_telegram_client(reactor.clone()),
+            inner: Rc::new(StateInner::init(reactor)),
         }
     }
 
@@ -57,6 +63,46 @@ impl State {
         &self.telegram_client
     }
 
+    /// Send a request using the Telegram API client, and track the messages the bot sends.
+    /// Because the stats of this message need to be tracked, it only allows to send requests that
+    /// have a `Message` as response.
+    /// This function uses a fixed timeout internally.
+    pub fn telegram_send<Req>(&self, request: Req)
+        -> Box<Future<Item = Option<Message>, Error = TelegramError>>
+        where
+            Req: Request<Response = JsonIdResponse<Message>>,
+    {
+        // Clone the state for use in this future
+        let state = self.clone();
+
+        // Send the message through the Telegram client, track the response for stats
+        let future = self.telegram_client()
+            .send_timeout(request, Duration::from_secs(10))
+            .inspect(move |msg| if let Some(msg) = msg {
+                if msg.edit_date.is_none() {
+                    state.stats().increase_stats(msg, 1, 0);
+                } else {
+                    state.stats().increase_stats(msg, 0, 1);
+                }
+            });
+
+        Box::new(future)
+    }
+
+    /// Send a request using the Telegram API client, and track the messages the bot sends.
+    /// This function spawns the request on the background and runs it to completion.
+    /// Because the stats of this message need to be tracked, it only allows to send requests that
+    /// have a `Message` as response.
+    /// This function uses a fixed timeout internally.
+    pub fn telegram_spawn<Req>(&self, request: Req)
+        where
+            Req: Request<Response = JsonIdResponse<Message>>,
+    {
+        self.inner.handle.spawn(
+            self.telegram_send(request).then(|_| Ok(())),
+        )
+    }
+
     /// Get the stats manager.
     pub fn stats(&self) -> &Stats {
         &self.inner.stats
@@ -68,6 +114,9 @@ struct StateInner {
     /// The database connection.
     db: MysqlConnection,
 
+    /// A handle to the reactor.
+    handle: Handle,
+
     /// The stats manager.
     stats: Stats,
 }
@@ -77,9 +126,10 @@ impl StateInner {
     ///
     /// This initializes the inner state.
     /// Internally this connects to the bot database.
-    pub fn init() -> StateInner {
+    pub fn init(handle: Handle) -> StateInner {
         StateInner {
             db: Self::create_database(),
+            handle,
             stats: Stats::new(),
         }
     }

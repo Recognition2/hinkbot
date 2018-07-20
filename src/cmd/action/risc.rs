@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use failure::{
     Error as FailureError,
     SyncFailure,
@@ -49,9 +47,7 @@ impl Action for Risc {
         -> Box<Future<Item = (), Error = FailureError>>
     {
         // Build a future for sending the response message
-        // TODO: make the timeout configurable
-        let future = state.telegram_client()
-            .send_timeout(
+        let future = state.telegram_send(
                 msg.text_reply(format!(
                         "\
                             `{} v{}`\n\
@@ -65,7 +61,6 @@ impl Action for Risc {
                         NAME,
                         VERSION,
                     )).parse_mode(ParseMode::Markdown),
-                Duration::from_secs(10),
             )
             .map(|_| ())
             .map_err(|err| Error::Respond(SyncFailure::new(err)))
