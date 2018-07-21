@@ -11,6 +11,7 @@ use telegram_bot::{
 
 use state::State;
 use super::Action;
+use super::help::build_help_list;
 
 /// The action command name.
 const CMD: &'static str = "start";
@@ -50,9 +51,16 @@ impl Action for Start {
                 msg.text_reply(format!("\
                             *Welcome {}!*\n\
                             \n\
-                            To start using this bot, see the list of available commands by sending /help\
+                            This bot adds useful features to Telegram such as message stats \
+                            tracking, and is intended to be used in group chats. \
+                            Add @riscbot to a group chat to start using it.\n\
+                            \n\
+                            You may choose one of the following commands to try it out:\n\
+                            \n\
+                            {}
                         ",
                         msg.from.first_name,
+                        build_help_list(),
                     ))
                     .parse_mode(ParseMode::Markdown),
             )

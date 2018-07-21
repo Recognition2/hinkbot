@@ -49,16 +49,7 @@ impl Action for Help {
         -> Box<Future<Item = (), Error = FailureError>>
     {
         // Build the command list
-        let mut cmds: Vec<String> = ACTIONS.iter()
-            .filter(|action| !action.hidden())
-            .map(|action| format!(
-                "/{}: _{}_",
-                action.cmd(),
-                action.help(),
-            ))
-            .collect();
-        cmds.sort();
-        let cmd_list = cmds.join("\n");
+        let cmd_list = build_help_list();
 
         // Build a future for sending the response help message
         let future = state.telegram_send(
@@ -74,6 +65,20 @@ impl Action for Help {
 
         Box::new(future)
     }
+}
+
+/// Build a string with a list of help commands.
+pub(crate) fn build_help_list() -> String {
+    let mut cmds: Vec<String> = ACTIONS.iter()
+        .filter(|action| !action.hidden())
+        .map(|action| format!(
+            "/{}: _{}_",
+            action.cmd(),
+            action.help(),
+        ))
+        .collect();
+    cmds.sort();
+    cmds.join("\n")
 }
 
 /// A help action error.
