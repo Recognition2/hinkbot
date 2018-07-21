@@ -3,11 +3,14 @@ use failure::{
     Error as FailureError,
     SyncFailure,
 };
-use futures::{Future, future::err};
+use futures::{
+    Future,
+    future::{err, ok},
+};
 use telegram_bot::{
     Error as TelegramError,
     prelude::*,
-    types::{Message, ParseMode},
+    types::{Message, MessageChat, MessageKind, ParseMode},
 };
 
 use state::State;
@@ -46,6 +49,15 @@ impl Action for Stats {
     fn invoke(&self, state: &State, msg: &Message)
         -> Box<Future<Item = (), Error = FailureError>>
     {
+        // Do not respond in non-private chats
+        match &msg.kind {
+            MessageKind::Text { ..  } => match &msg.chat {
+                MessageChat::Private(..) => {},
+                _ => return Box::new(ok(())),
+            },
+            _ => {},
+        }
+
         // Fetch the chat message stats
         let stats = match state
             .stats()
