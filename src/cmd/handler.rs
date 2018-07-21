@@ -12,7 +12,7 @@ use super::action::ACTIONS;
 lazy_static! {
     /// A regex for matching messages that contain a command.
     static ref CMD_REGEX: Regex = Regex::new(
-        r"^/(?is)([A-Z0-9_]+)(@[A-Z0-9_]+)?(\s.*$|$)",
+        r"^/(?is)(?P<cmd>[A-Z0-9_]+)(@(?P<bot>[A-Z0-9_]+))?(\s.*$|$)",
     ).expect("failed to compile CMD_REGEX");
 }
 
@@ -45,14 +45,28 @@ impl Handler {
 }
 
 /// Test wether the given message is recognized as a command.
+/// If a specific bot is given with a `@bot` suffix, commands only match if the given bot name\
+/// equals the name of this bot.
 ///
 /// The actual command name is returned if it is, `None` otherwise.
-// TODO: if a target bot is given with `/cmd@bot`, ensure it's username is matching
+// TODO: dynamically load the bot name from the API
 pub fn matches_cmd(msg: &str) -> Option<&str> {
-    if let Some(groups) = CMD_REGEX.captures(msg.trim()) {
-        Some(groups.get(1).unwrap().as_str())
-    } else {
-        None
+    match CMD_REGEX.captures(msg.trim()) {
+        Some(groups) => {
+            // Get the command
+            let cmd = groups
+                .name("cmd")
+                .expect("failed to extract command from command regex")
+                .as_str();
+
+            // Ensure the bot name matches if one is given
+            match groups.name("bot") {
+                Some(bot) if bot.as_str() == "riscbot" => Some(cmd),
+                None => Some(cmd),
+                _ => None,
+            }
+        },
+        None => None,
     }
 }
 
