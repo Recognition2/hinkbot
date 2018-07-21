@@ -61,11 +61,16 @@ impl Action for Stats {
         // Append the user totals
         let totals: Vec<String> = stats.users()
             .iter()
+            .map(|(user, _, username, messages, edits)| match username {
+                Some(username) if !username.is_empty() => 
+                    (format!("[{}](https://t.me/{})", user, username), messages, edits),
+                _ => (user.to_owned(), messages, edits),
+            })
             .enumerate()
-            .map(|(i, (user, user_id, messages, edits))| if *edits > 0 {
-                format!("{}. [{}](tg://user?id={}): _{} ({})_", i + 1, user, user_id, messages, edits)
+            .map(|(i, (name, messages, edits))| if *edits > 0 {
+                format!("{}. {}: _{} ({})_", i + 1, name, messages, edits)
             } else {
-                format!("{}. [{}](tg://user?id={}): _{}_", i + 1, user, user_id, messages)
+                format!("{}. {}: _{}_", i + 1, name, messages)
             })
             .collect();
         response += &totals.join("\n");
@@ -100,7 +105,7 @@ impl Action for Stats {
             .telegram_send(
                 msg.text_reply(response)
                     .parse_mode(ParseMode::Markdown)
-                    .disable_notification(),
+                    .disable_preview(),
             )
             .map(|_| ())
             .map_err(|err| Error::Respond(SyncFailure::new(err)))

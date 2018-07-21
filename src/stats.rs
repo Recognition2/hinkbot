@@ -22,7 +22,7 @@ pub struct Stats {
 
     /// A queue of user names for recent messages, these should be updated in the database if
     /// changed.
-    queue_names: Mutex<HashMap<UserId, (String, Option<String>)>>,
+    queue_names: Mutex<HashMap<UserId, (Option<String>, String, Option<String>)>>,
 }
 
 impl Stats {
@@ -65,8 +65,9 @@ impl Stats {
             Ok(ref mut names) => {
                 names.entry(message.from.id)
                     .or_insert((
+                        message.from.username.to_owned(),
                         message.from.first_name.clone(),
-                        message.from.last_name.to_owned()
+                        message.from.last_name.to_owned(),
                     ));
             },
             Err(_) => eprintln!("ERR: failed lock stats queue, unable to increase user stats"),
@@ -96,7 +97,7 @@ impl Stats {
     /// Any errors while flushing are reported in the console.
     pub fn flush_chats(
         chats: &mut HashMap<ChatId, HashMap<UserId, HashMap<StatsKind, (u32, u32)>>>,
-        names: &mut HashMap<UserId, (String, Option<String>)>,
+        names: &mut HashMap<UserId, (Option<String>, String, Option<String>)>,
         connection: &MysqlConnection,
     ) {
         // Flush each chat, remove the successfully flushed
@@ -138,7 +139,7 @@ impl Stats {
     pub fn flush_users(
         chat: ChatId,
         users: &mut HashMap<UserId, HashMap<StatsKind, (u32, u32)>>,
-        names: &mut HashMap<UserId, (String, Option<String>)>,
+        names: &mut HashMap<UserId, (Option<String>, String, Option<String>)>,
         connection: &MysqlConnection,
     ) {
         // Flush all users in this chat, remove successfully flushed
@@ -147,10 +148,11 @@ impl Stats {
             match user::dsl::user.find(user.to_i64()).first::<User>(connection) {
                 Ok(existing) => {
                     // Update the existing user if details changed
-                    if let Some((first, last)) = names.get(user) {
-                        if *first != existing.first_name || *last != existing.last_name {
+                    if let Some((user_username, first, last)) = names.get(user) {
+                        if *user_username != existing.username || *first != existing.first_name || *last != existing.last_name {
                             if let Err(err) = diesel::update(&existing)
                                 .set((
+                                    user::dsl::username.eq(user_username),
                                     user::dsl::first_name.eq(first),
                                     user::dsl::last_name.eq(last),
                                 ))
@@ -171,8 +173,9 @@ impl Stats {
                         diesel::insert_into(user::dsl::user)
                             .values((
                                 user::dsl::telegram_id.eq(user.to_i64()),
-                                user::dsl::first_name.eq(name.0.clone()),
-                                user::dsl::last_name.eq(name.1.clone()),
+                                user::dsl::username.eq(name.0.clone()),
+                                user::dsl::first_name.eq(name.1.clone()),
+                                user::dsl::last_name.eq(name.2.clone()),
                             ))
                             .execute(connection)
                     } else {
@@ -278,24 +281,25 @@ impl Stats {
             messages,
             user_id,
         };
-        use self::user::dsl::{first_name, last_name};
+        use self::user::dsl::{username, first_name, last_name};
 
         // Get all message stats associated with this chat
         // TODO: do a left join instead
-        let all_stats: Vec<(i64, String, Option<String>, i16, i32, i32)> = chat_user_stats
+        let all_stats: Vec<(i64, Option<String>, String, Option<String>, i16, i32, i32)> = chat_user_stats
             .inner_join(user::table)
-            .select((user_id, first_name, last_name, message_type, messages, edits))
+            .select((user_id, username, first_name, last_name, message_type, messages, edits))
             .filter(chat_id.eq(selected_chat.to_i64()))
             .load(connection)?;
 
         // Build a hashmap of user totals, add database and queue stats
-        let mut user_totals: HashMap<i64, (Option<String>, Option<String>, i32, i32)> = HashMap::new();
-        for (user, first, last, _, num_messages, num_edits) in &all_stats {
-            let entry = user_totals.entry(*user).or_insert((None, None, 0, 0));
-            entry.0 = Some(first.clone());
-            entry.1 = last.clone();
-            entry.2 += num_messages;
-            entry.3 += num_edits;
+        let mut user_totals: HashMap<i64, (Option<String>, Option<String>, Option<String>, i32, i32)> = HashMap::new();
+        for (user, user_username, first, last, _, num_messages, num_edits) in &all_stats {
+            let entry = user_totals.entry(*user).or_insert((None, None, None, 0, 0));
+            entry.0 = user_username.clone();
+            entry.1 = Some(first.clone());
+            entry.2 = last.clone();
+            entry.3 += num_messages;
+            entry.4 += num_edits;
         }
         if let Ok(ref mut queue) = self.queue.lock() {
             if let Some(chat_queue) = queue.get(&selected_chat) {
@@ -307,14 +311,15 @@ impl Stats {
                         .and_then(|names| names.get(user).cloned());
 
                     // Get the entry and update it
-                    let entry = user_totals.entry(user.to_i64()).or_insert((None, None, 0, 0));
+                    let entry = user_totals.entry(user.to_i64()).or_insert((None, None, None, 0, 0));
                     for (num_messages, num_edits) in kind_stats.values() {
-                        if let Some((first, last)) = &name {
-                            entry.0 = Some(first.clone());
-                            entry.1 = last.clone();
+                        if let Some((user_username, first, last)) = &name {
+                            entry.0 = user_username.clone();
+                            entry.1 = Some(first.clone());
+                            entry.2 = last.clone();
                         }
-                        entry.2 += *num_messages as i32;
-                        entry.3 += *num_edits as i32;
+                        entry.3 += *num_messages as i32;
+                        entry.4 += *num_edits as i32;
                     }
                 }
             }
@@ -323,7 +328,7 @@ impl Stats {
         // Build a hashmap of user specific stats, add database and queue stats
         let mut user_specifics: HashMap<StatsKind, (i32, i32)> = HashMap::new();
         if let Some(ref selected_user) = selected_user {
-            for (user, _, _, kind, num_messages, num_edits) in all_stats {
+            for (user, _, _, _, kind, num_messages, num_edits) in all_stats {
                 // Ignore other users
                 if user != selected_user.to_i64() {
                     continue;
@@ -354,24 +359,24 @@ impl Stats {
         }
 
         // Build a sorted list of user totals for easier reporting
-        let mut user_totals: Vec<(String, i64, i32, i32)> = user_totals
+        let mut user_totals: Vec<(String, i64, Option<String>, i32, i32)> = user_totals
             .into_iter()
-            .map(|(user, (first, _, num_messages, num_edits))| (
-                if let Some(first) = first {
-                        if first.is_empty() {
-                            format!("{}", user)
+            .map(|(user, (user_username, first, _, num_messages, num_edits))| (
+                match first {
+                    Some(ref first) if !first.is_empty() => first.to_owned(),
+                    _ => if let Some(user_username) = &user_username {
+                            user_username.to_owned()
                         } else {
-                            first
-                        }
-                    } else {
-                        format!("{}", user)
-                    },
+                            format!("{}", user)
+                        },
+                },
                 user,
+                user_username,
                 num_messages,
                 num_edits,
             ))
             .collect();
-        user_totals.sort_unstable_by(|a, b| (b.2 + b.3).cmp(&(a.2 + a.3)));
+        user_totals.sort_unstable_by(|a, b| (b.3 + b.4).cmp(&(a.3 + a.4)));
 
         // Build a sorted list of user specifics for easier reporting
         let user_specifics = if !user_specifics.is_empty() {
@@ -387,8 +392,8 @@ impl Stats {
         };
 
         // Get message totals for this chat
-        let total_messages = user_totals.iter().map(|(_, _, n, _)| n).sum();
-        let total_edits = user_totals.iter().map(|(_, _, _, n)| n).sum();
+        let total_messages = user_totals.iter().map(|(_, _, _, n, _)| n).sum();
+        let total_edits = user_totals.iter().map(|(_, _, _, _, n)| n).sum();
 
         // Get the time we started recording stats at
         let since = chat_user_stats
@@ -407,8 +412,8 @@ impl Stats {
 pub struct ChatStats {
     /// A list of users and the number of messages and edits they made.
     /// This vector is sorted from largest to lowest number of edits.
-    /// The following format is used: `(user name, user ID, messages, edits)`.
-    users: Vec<(String, i64, i32, i32)>,
+    /// The following format is used: `(user name, user ID, user username, messages, edits)`.
+    users: Vec<(String, i64, Option<String>, i32, i32)>,
 
     /// A list of user specific stats if a user was given.
     /// This vector is sorted from the largest to the lowest number for each stats kind.
@@ -428,7 +433,7 @@ pub struct ChatStats {
 impl ChatStats {
     /// Constructor.
     pub fn new(
-        users: Vec<(String, i64, i32, i32)>,
+        users: Vec<(String, i64, Option<String>, i32, i32)>,
         specific: Option<Vec<(StatsKind, i32, i32)>>,
         total_messages: i32,
         total_edits: i32,
@@ -444,7 +449,7 @@ impl ChatStats {
     }
 
     /// Get the user totals.
-    pub fn users(&self) -> &Vec<(String, i64, i32, i32)> {
+    pub fn users(&self) -> &Vec<(String, i64, Option<String>, i32, i32)> {
         &self.users
     }
 

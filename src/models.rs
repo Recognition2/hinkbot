@@ -17,6 +17,7 @@ pub struct Chat {
 #[table_name = "user"]
 pub struct User {
     pub telegram_id: i64,
+    pub username: Option<String>,
     pub first_name: String,
     pub last_name: Option<String>,
     pub created_at: NaiveDateTime,
