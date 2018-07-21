@@ -46,6 +46,15 @@ impl Action for Start {
     fn invoke(&self, state: &State, msg: &Message)
         -> Box<Future<Item = (), Error = FailureError>>
     {
+        // Do not respond in non-private chats
+        match &msg.kind {
+            MessageKind::Text { ..  } => match &msg.chat {
+                MessageChat::Private(..) => {},
+                _ => return Box::new(ok(())),
+            },
+            _ => {},
+        }
+
         // Build a future for sending the response start message
         let future = state.telegram_send(
                 msg.text_reply(format!("\
