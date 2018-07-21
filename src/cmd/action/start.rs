@@ -2,11 +2,14 @@ use failure::{
     Error as FailureError,
     SyncFailure,
 };
-use futures::Future;
+use futures::{
+    Future,
+    future::ok,
+};
 use telegram_bot::{
     Error as TelegramError,
     prelude::*,
-    types::{Message, ParseMode},
+    types::{Message, MessageChat, MessageKind, ParseMode},
 };
 
 use state::State;
