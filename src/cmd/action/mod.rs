@@ -5,6 +5,7 @@ pub mod help;
 pub mod id;
 pub mod ping;
 pub mod risc;
+pub mod retweet;
 pub mod start;
 pub mod stats;
 pub mod test;
@@ -29,6 +30,7 @@ lazy_static! {
         Box::new(self::id::Id::new()),
         Box::new(self::ping::Ping::new()),
         Box::new(self::risc::Risc::new()),
+        Box::new(self::retweet::Retweet::new()),
         Box::new(self::start::Start::new()),
         Box::new(self::stats::Stats::new()),
         Box::new(self::test::Test::new()),
