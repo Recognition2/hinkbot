@@ -6,6 +6,7 @@ use futures::{
     Future,
     future::ok,
 };
+use regex::Regex;
 use telegram_bot::{
     Error as TelegramError,
     prelude::*,
@@ -24,6 +25,13 @@ const HIDDEN: bool = false;
 
 /// The action help.
 const HELP: &'static str = "Retweet a message";
+
+lazy_static! {
+    /// A regex for matching a retweeted message
+    static ref RT_REGEX: Regex = Regex::new(
+        r"^.* RTs:\s(?P<msg>.+)$",
+    ).expect("failed to compile RT_REGEX");
+}
 
 pub struct Retweet;
 
@@ -81,10 +89,24 @@ impl Action for Retweet {
         // Only text messages can be retweeted
         match &retweet_msg.kind {
             MessageKind::Text { data, .. } => {
-                // Build the retweet message
-                let mut response = data.clone();
-                if response.contains("\n") {
-                    response.insert(0, '\n');
+                // Get the retweet text
+                let mut retweet_text = data.clone();
+
+                // Remove any previous retweet notices
+                match RT_REGEX.captures(&data) {
+                    Some(groups) => {
+                        retweet_text = groups
+                            .name("msg")
+                            .expect("failed to extract message from retweet target")
+                            .as_str()
+                            .to_owned();
+                    },
+                    None => {},
+                }
+
+                // Prefix a newline if the retweet text is multi line
+                if retweet_text.contains("\n") {
+                    retweet_text.insert(0, '\n');
                 }
 
                 // Send the retweet message
@@ -94,7 +116,7 @@ impl Action for Retweet {
                                     <a href=\"tg://user?id={}\">{}</a> <b>RTs:</b> {}",
                                     msg.from.id,
                                     msg.from.first_name,
-                                    response,
+                                    retweet_text,
                                 ))
                                 .parse_mode(ParseMode::Html),
                         )
