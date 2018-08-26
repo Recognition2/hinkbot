@@ -81,13 +81,20 @@ impl Action for Retweet {
         // Only text messages can be retweeted
         match &retweet_msg.kind {
             MessageKind::Text { data, .. } => {
+                // Build the retweet message
+                let mut response = data.clone();
+                if response.contains("\n") {
+                    response.insert(0, '\n');
+                }
+
+                // Send the retweet message
                 Box::new(
                     state.telegram_send(
                             retweet_msg.text_reply(format!("\
                                     <a href=\"tg://user?id={}\">{}</a> <b>RTs:</b> {}",
                                     msg.from.id,
                                     msg.from.first_name,
-                                    data,
+                                    response,
                                 ))
                                 .parse_mode(ParseMode::Html),
                         )
