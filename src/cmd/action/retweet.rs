@@ -59,9 +59,9 @@ impl Action for Retweet {
     {
         // Get the reply message which we should retweet
         let retweet_msg: &Message = match msg.reply_to_message {
-            Some(ref msg) => match msg {
-                box MessageOrChannelPost::Message(msg) => msg,
-                box MessageOrChannelPost::ChannelPost(_) => return Box::new(
+            Some(ref msg) => match msg.as_ref() {
+                MessageOrChannelPost::Message(msg) => msg,
+                MessageOrChannelPost::ChannelPost(_) => return Box::new(
                     state.telegram_send(
                             msg.text_reply(format!("You can't retweet a channel post."))
                                 .parse_mode(ParseMode::Markdown),

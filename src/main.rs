@@ -1,5 +1,3 @@
-#![feature(box_patterns)]
-
 extern crate chrono;
 #[macro_use]
 extern crate diesel;
