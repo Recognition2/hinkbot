@@ -624,7 +624,7 @@ impl StatsKind {
 }
 
 // TODO: find something better for this
-trait TelegramToI64 {
+pub trait TelegramToI64 {
     fn to_i64(&self) -> i64;
 }
 

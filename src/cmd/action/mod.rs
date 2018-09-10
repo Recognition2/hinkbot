@@ -1,3 +1,4 @@
+pub mod all;
 pub mod echo;
 pub mod echohtml;
 pub mod exec;
@@ -23,6 +24,7 @@ lazy_static! {
     /// A list of all available and invokable actions.
     /// This list includes hidden actions which may be filtered using the `.hidden()` propery.
     pub(crate) static ref ACTIONS: Vec<Box<dyn Action + Sync>> = vec![
+        Box::new(self::all::All::new()),
         Box::new(self::echo::Echo::new()),
         Box::new(self::echohtml::EchoHtml::new()),
         Box::new(self::exec::Exec::new()),
