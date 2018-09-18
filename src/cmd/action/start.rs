@@ -1,20 +1,14 @@
-use failure::{
-    Error as FailureError,
-    SyncFailure,
-};
-use futures::{
-    Future,
-    future::ok,
-};
+use failure::{Error as FailureError, SyncFailure};
+use futures::{future::ok, Future};
 use telegram_bot::{
-    Error as TelegramError,
     prelude::*,
     types::{Message, MessageChat, MessageKind, ParseMode},
+    Error as TelegramError,
 };
 
-use state::State;
-use super::Action;
 use super::help::build_help_list;
+use super::Action;
+use state::State;
 
 /// The action command name.
 const CMD: &'static str = "start";
@@ -46,21 +40,21 @@ impl Action for Start {
         HELP
     }
 
-    fn invoke(&self, state: &State, msg: &Message)
-        -> Box<Future<Item = (), Error = FailureError>>
-    {
+    fn invoke(&self, state: &State, msg: &Message) -> Box<Future<Item = (), Error = FailureError>> {
         // Do not respond in non-private chats
         match &msg.kind {
-            MessageKind::Text { ..  } => match &msg.chat {
-                MessageChat::Private(..) => {},
+            MessageKind::Text { .. } => match &msg.chat {
+                MessageChat::Private(..) => {}
                 _ => return Box::new(ok(())),
             },
-            _ => {},
+            _ => {}
         }
 
         // Build a future for sending the response start message
-        let future = state.telegram_send(
-                msg.text_reply(format!("\
+        let future = state
+            .telegram_send(
+                msg.text_reply(format!(
+                    "\
                             *Welcome {}!*\n\
                             \n\
                             This bot adds useful features to Telegram such as message stats \
@@ -71,12 +65,10 @@ impl Action for Start {
                             \n\
                             {}
                         ",
-                        msg.from.first_name,
-                        build_help_list(),
-                    ))
-                    .parse_mode(ParseMode::Markdown),
-            )
-            .map(|_| ())
+                    msg.from.first_name,
+                    build_help_list(),
+                )).parse_mode(ParseMode::Markdown),
+            ).map(|_| ())
             .map_err(|err| Error::Respond(SyncFailure::new(err)))
             .from_err();
 

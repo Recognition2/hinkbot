@@ -4,23 +4,18 @@ extern crate tokio_process;
 use std::io::BufReader;
 use std::process::{Command, ExitStatus, Stdio};
 
-use futures::{
-    future::err,
-    Future,
-    Stream,
-};
 use self::tokio_io::io::lines;
 use self::tokio_process::CommandExt;
 use super::Error;
+use futures::{future::err, Future, Stream};
 
 /// Execute the given command.
-/// 
+///
 /// `stdout` and `stderr` is streamed line by line to the `output` closure,
 /// which is called for each line that received.
-pub fn execute<O>(cmd: &mut Command, output: O)
-    -> Box<Future<Item = ExitStatus, Error = Error>>
-    where
-        O: Fn(String) -> Result<(), Error> + Clone + 'static
+pub fn execute<O>(cmd: &mut Command, output: O) -> Box<Future<Item = ExitStatus, Error = Error>>
+where
+    O: Fn(String) -> Result<(), Error> + Clone + 'static,
 {
     // Spawn a child process to run the given command in
     // TODO: configurable timeout

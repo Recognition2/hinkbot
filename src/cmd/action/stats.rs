@@ -1,20 +1,14 @@
 use diesel::result::Error as DieselError;
-use failure::{
-    Error as FailureError,
-    SyncFailure,
-};
-use futures::{
-    Future,
-    future::err,
-};
+use failure::{Error as FailureError, SyncFailure};
+use futures::{future::err, Future};
 use telegram_bot::{
-    Error as TelegramError,
     prelude::*,
     types::{Message, ParseMode},
+    Error as TelegramError,
 };
 
-use state::State;
 use super::Action;
+use state::State;
 
 /// The action command name.
 const CMD: &'static str = "stats";
@@ -46,36 +40,39 @@ impl Action for Stats {
         HELP
     }
 
-    fn invoke(&self, state: &State, msg: &Message)
-        -> Box<Future<Item = (), Error = FailureError>>
-    {
+    fn invoke(&self, state: &State, msg: &Message) -> Box<Future<Item = (), Error = FailureError>> {
         // Fetch the chat message stats
-        let stats = match state
-            .stats()
-            .fetch_chat_stats(state.db(), msg.chat.id(), Some(msg.from.id))
-        {
-            Ok(stats) => stats,
-            Err(e) => return Box::new(err(e.into())),
-        };
+        let stats =
+            match state
+                .stats()
+                .fetch_chat_stats(state.db(), msg.chat.id(), Some(msg.from.id))
+            {
+                Ok(stats) => stats,
+                Err(e) => return Box::new(err(e.into())),
+            };
 
         // Build the chat message
         let mut response = String::from("*Messages (edits):*\n");
 
         // Append the user totals
-        let totals: Vec<String> = stats.users()
+        let totals: Vec<String> = stats
+            .users()
             .iter()
             .map(|(user, _, username, messages, edits)| match username {
-                Some(username) if !username.is_empty() => 
-                    (format!("[{}](https://t.me/{})", user, username), messages, edits),
+                Some(username) if !username.is_empty() => (
+                    format!("[{}](https://t.me/{})", user, username),
+                    messages,
+                    edits,
+                ),
                 _ => (user.to_owned(), messages, edits),
-            })
-            .enumerate()
-            .map(|(i, (name, messages, edits))| if *edits > 0 {
-                format!("{}. {}: _{} ({})_", i + 1, name, messages, edits)
-            } else {
-                format!("{}. {}: _{}_", i + 1, name, messages)
-            })
-            .collect();
+            }).enumerate()
+            .map(|(i, (name, messages, edits))| {
+                if *edits > 0 {
+                    format!("{}. {}: _{} ({})_", i + 1, name, messages, edits)
+                } else {
+                    format!("{}. {}: _{}_", i + 1, name, messages)
+                }
+            }).collect();
         response += &totals.join("\n");
 
         // Append the user specifics if available
@@ -83,12 +80,13 @@ impl Action for Stats {
             response += "\n\n*Your messages (edits):*\n";
             let specific: Vec<String> = specific
                 .iter()
-                .map(|(kind, messages, edits)| if *edits > 0 {
-                    format!("{}s: _{} ({})_", ucfirst(kind.name()), messages, edits)
-                } else {
-                    format!("{}s: _{}_", ucfirst(kind.name()), messages)
-                })
-                .collect();
+                .map(|(kind, messages, edits)| {
+                    if *edits > 0 {
+                        format!("{}s: _{} ({})_", ucfirst(kind.name()), messages, edits)
+                    } else {
+                        format!("{}s: _{}_", ucfirst(kind.name()), messages)
+                    }
+                }).collect();
             response += &specific.join("\n");
         }
 
@@ -109,8 +107,7 @@ impl Action for Stats {
                 msg.text_reply(response)
                     .parse_mode(ParseMode::Markdown)
                     .disable_preview(),
-            )
-            .map(|_| ())
+            ).map(|_| ())
             .map_err(|err| Error::Respond(SyncFailure::new(err)))
             .from_err();
 
@@ -138,12 +135,14 @@ impl From<DieselError> for Error {
 
 /// Uppercase the first character.
 fn ucfirst(string: &str) -> String {
-    string.chars()
+    string
+        .chars()
         .enumerate()
-        .filter_map(|(i, c)| if i == 0 {
+        .filter_map(|(i, c)| {
+            if i == 0 {
                 c.to_uppercase().next()
             } else {
                 Some(c)
-            })
-        .collect()
+            }
+        }).collect()
 }

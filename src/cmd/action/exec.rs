@@ -7,34 +7,22 @@ use std::time::{Duration, Instant, SystemTime};
 
 use state::State;
 
-use failure::{
-    Compat,
-    err_msg,
-    Error as FailureError,
-    SyncFailure,
-};
+use self::htmlescape::encode_minimal;
+use self::tokio_timer::{Error as TimerError, Interval};
+use failure::{err_msg, Compat, Error as FailureError, SyncFailure};
 use futures::{
     future::{err, ok},
-    Future,
-    Stream,
+    Future, Stream,
 };
 use humantime::format_duration;
 use telegram_bot::{
-    Error as TelegramError,
     prelude::*,
     types::{Message, MessageKind, ParseMode},
-};
-use self::htmlescape::encode_minimal;
-use self::tokio_timer::{
-    Error as TimerError,
-    Interval,
+    Error as TelegramError,
 };
 
-use executor::{
-    Error as ExecutorError,
-    isolated,
-};
 use super::Action;
+use executor::{isolated, Error as ExecutorError};
 
 /// The action command name.
 const CMD: &'static str = "exec";
@@ -65,9 +53,11 @@ impl Exec {
     ///
     /// Send a reply to the given user command `msg`
     /// and timely update it to show the status of the command that was executed.
-    pub fn exec_cmd<'a>(state: &State, cmd: String, msg: &Message)
-        -> impl Future<Item = (), Error = Error>
-    {
+    pub fn exec_cmd<'a>(
+        state: &State,
+        cmd: String,
+        msg: &Message,
+    ) -> impl Future<Item = (), Error = Error> {
         // Create the status message, and build the executable status object
         let exec_status = ExecStatus::create_status_msg(state.clone(), msg);
 
@@ -80,36 +70,32 @@ impl Exec {
             let status_output = status.clone();
             let status_exit = status.clone();
             let cmd = isolated::execute(cmd, move |line| {
-                    // Append the line to the captured output
-                    status_output.lock().unwrap().append_line(&line);
-                    Ok(())
-                })
-                .and_then(move |status| {
-                    // Set the exit status
-                    status_exit.lock().unwrap().set_status(status);
-                    ok(())
-                })
-                .map_err(|err| Error::Execute(err));
+                // Append the line to the captured output
+                status_output.lock().unwrap().append_line(&line);
+                Ok(())
+            }).and_then(move |status| {
+                // Set the exit status
+                status_exit.lock().unwrap().set_status(status);
+                ok(())
+            }).map_err(|err| Error::Execute(err));
 
             // Set up an interval for constantly updating the status
             let status_update = status.clone();
             Interval::new(
-                    Instant::now() + Duration::from_millis(1000),
-                    Duration::from_millis(1000),
-                )
-                .map_err(|err| Error::Throttle(err))
-                .for_each(move |_| {
-                    // Update the status on Telegram, throttled
-                    status_update.lock().unwrap().update_throttled();
-                    Ok(())
-                })
-                .select(cmd)
-                .map_err(|(err, _)| err)
-                .and_then(move |_| {
-                    // Update one final time, to ensure all status is sent to Telegram
-                    status.lock().unwrap().update();
-                    ok(())
-                })
+                Instant::now() + Duration::from_millis(1000),
+                Duration::from_millis(1000),
+            ).map_err(|err| Error::Throttle(err))
+            .for_each(move |_| {
+                // Update the status on Telegram, throttled
+                status_update.lock().unwrap().update_throttled();
+                Ok(())
+            }).select(cmd)
+            .map_err(|(err, _)| err)
+            .and_then(move |_| {
+                // Update one final time, to ensure all status is sent to Telegram
+                status.lock().unwrap().update();
+                ok(())
+            })
         })
     }
 }
@@ -128,16 +114,12 @@ impl Action for Exec {
     }
 
     // TODO: proper error handling everywhere, pass errors along
-    fn invoke(&self, state: &State, msg: &Message)
-        -> Box<Future<Item = (), Error = FailureError>>
-    {
-        if let MessageKind::Text {
-            ref data,
-            ..
-        } = &msg.kind {
+    fn invoke(&self, state: &State, msg: &Message) -> Box<Future<Item = (), Error = FailureError>> {
+        if let MessageKind::Text { ref data, .. } = &msg.kind {
             // The command to run in the shell
             // TODO: actually properly fetch the command to execute from the full message
-            let cmd = data.splitn(2, ' ')
+            let cmd = data
+                .splitn(2, ' ')
                 .skip(1)
                 .next()
                 .map(|cmd| cmd.trim_left())
@@ -147,15 +129,17 @@ impl Action for Exec {
             // Provide the user with feedback if no command is entered
             if cmd.trim().is_empty() {
                 // Build a future for sending the help message
-                let future = state.telegram_send(
-                        msg.text_reply("\
-                                Please provide a command to run.\n\
-                                \n\
-                                For example:\n\
-                                `/exec echo Hello!`\
-                            ").parse_mode(ParseMode::Markdown),
-                    )
-                    .map(|_| ())
+                let future = state
+                    .telegram_send(
+                        msg.text_reply(
+                            "\
+                             Please provide a command to run.\n\
+                             \n\
+                             For example:\n\
+                             `/exec echo Hello!`\
+                             ",
+                        ).parse_mode(ParseMode::Markdown),
+                    ).map(|_| ())
                     .map_err(|err| Error::Help(SyncFailure::new(err)))
                     .from_err();
 
@@ -166,9 +150,7 @@ impl Action for Exec {
             println!("CMD: {}", cmd);
 
             // Execute the command, report back to the user
-            return Box::new(
-                Self::exec_cmd(state, cmd, msg).from_err(),
-            );
+            return Box::new(Self::exec_cmd(state, cmd, msg).from_err());
         } else {
             Box::new(ok(()))
         }
@@ -217,22 +199,25 @@ pub struct ExecStatus {
 impl ExecStatus {
     /// Create a status output message as reply on the given `msg`,
     /// and return an `ExecStatus` for it.
-    pub fn create_status_msg(state: State, msg: &Message)
-        -> impl Future<Item = Self, Error = Error>
-    {
+    pub fn create_status_msg(
+        state: State,
+        msg: &Message,
+    ) -> impl Future<Item = Self, Error = Error> {
         // TODO: handle the Telegram errors properly
-        state.telegram_send(
+        state
+            .telegram_send(
                 msg.text_reply("<i>Executing command...</i>")
                     .parse_mode(ParseMode::Html),
-            )
-            .map_err(|err| -> FailureError { SyncFailure::new(err).into() })
+            ).map_err(|err| -> FailureError { SyncFailure::new(err).into() })
             .map_err(|err| Error::StatusMessage(err.compat()))
-            .and_then(|msg| if let Some(msg) = msg {
-                ok(ExecStatus::new(state, msg))
-            } else {
-                err(Error::StatusMessage(err_msg(
+            .and_then(|msg| {
+                if let Some(msg) = msg {
+                    ok(ExecStatus::new(state, msg))
+                } else {
+                    err(Error::StatusMessage(err_msg(
                     "failed to send command status message, got empty response from Telegram API",
                 ).compat()))
+                }
             })
     }
 
@@ -241,7 +226,7 @@ impl ExecStatus {
         ExecStatus {
             output: String::new(),
             status: None,
-            started_at:SystemTime::now(),
+            started_at: SystemTime::now(),
             completion_duration: None,
             changed: false,
             changed_at: SystemTime::now(),
@@ -322,13 +307,13 @@ impl ExecStatus {
 
         // Deterime whether to print a special notice
         let mut notice = match self.status {
-            Some(status) if !status.success() =>
-                format!(
-                    " Exit code <code>{}</code>",
-                    status.code()
-                        .map(|code| code.to_string())
-                        .unwrap_or("?".into()),
-                ),
+            Some(status) if !status.success() => format!(
+                " Exit code <code>{}</code>",
+                status
+                    .code()
+                    .map(|code| code.to_string())
+                    .unwrap_or("?".into()),
+            ),
             _ => String::new(),
         };
 
@@ -341,7 +326,10 @@ impl ExecStatus {
             status_labels.push("timed out".into());
         }
         if self.completed() && self.completion_duration.is_some() {
-            status_labels.push(format!("took {}", self.format_duration().unwrap_or("?".into())));
+            status_labels.push(format!(
+                "took {}",
+                self.format_duration().unwrap_or("?".into())
+            ));
         }
         if self.truncating() {
             if self.completed() {
@@ -358,10 +346,11 @@ impl ExecStatus {
         let output = if self.output.is_empty() {
             "<i>No output</i>".to_owned()
         } else {
-            format!("\
-                    <b>Output:</b>\n\
-                    <code>{}{}</code>\
-                ",
+            format!(
+                "\
+                 <b>Output:</b>\n\
+                 <code>{}{}</code>\
+                 ",
                 if self.truncating() {
                     "[truncated] "
                 } else {
@@ -372,14 +361,13 @@ impl ExecStatus {
         };
 
         // Format the message
-        format!("\
-                {}\n\
-                \n\
-                {}  {}\
-            ",
-            output,
-            emoji,
-            notice,
+        format!(
+            "\
+             {}\n\
+             \n\
+             {}  {}\
+             ",
+            output, emoji, notice,
         )
     }
 
@@ -421,7 +409,7 @@ impl ExecStatus {
         match self.changed_at.elapsed() {
             Ok(elapsed) if elapsed < self.throttle_duration() => return,
             Err(..) => return,
-            _ => {},
+            _ => {}
         }
 
         // Update
@@ -468,15 +456,15 @@ impl ExecStatus {
     fn timed_out(&self) -> bool {
         // We must have a status code of 124
         match self.status {
-            Some(status) if status.code() == Some(124) => {},
+            Some(status) if status.code() == Some(124) => {}
             _ => return false,
         }
 
         // If a duration is known, it must reach the timeout time
         match self.completion_duration {
-            Some(duration) if duration >= EXEC_TIMEOUT - EXEC_TIMEOUT_PRECISION => {},
+            Some(duration) if duration >= EXEC_TIMEOUT - EXEC_TIMEOUT_PRECISION => {}
             Some(_) => return false,
-            _ => {},
+            _ => {}
         }
 
         // The conditions for being timed out have been met
@@ -487,16 +475,17 @@ impl ExecStatus {
     /// If the completion time is not known, `None` is returned.
     fn format_duration(&self) -> Option<String> {
         match self.completion_duration {
-            Some(duration) if duration.as_secs() >= 1 =>
-                Some(
-                    format_duration(
-                        Duration::from_secs(duration.as_secs())
-                    ).to_string()
-                ),
-            Some(duration) =>
-                Some(
-                    format_duration(duration).to_string().splitn(2, ' ').next().unwrap().into()
-                ),
+            Some(duration) if duration.as_secs() >= 1 => {
+                Some(format_duration(Duration::from_secs(duration.as_secs())).to_string())
+            }
+            Some(duration) => Some(
+                format_duration(duration)
+                    .to_string()
+                    .splitn(2, ' ')
+                    .next()
+                    .unwrap()
+                    .into(),
+            ),
             None => None,
         }
     }

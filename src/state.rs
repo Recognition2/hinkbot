@@ -2,15 +2,11 @@ use std::env;
 use std::rc::Rc;
 use std::time::Duration;
 
-use diesel::{
-    mysql::MysqlConnection,
-    prelude::*,
-};
+use diesel::{mysql::MysqlConnection, prelude::*};
 use futures::Future;
 use telegram_bot::{
-    Api,
-    Error as TelegramError,
     types::{JsonIdResponse, Message, Request},
+    Api, Error as TelegramError,
 };
 use tokio_core::reactor::Handle;
 
@@ -44,8 +40,7 @@ impl State {
     /// Create a Telegram API client instance, and initiate a connection.
     fn create_telegram_client(reactor: Handle) -> Api {
         // Retrieve the Telegram bot token
-        let token = env::var("TELEGRAM_BOT_TOKEN")
-            .expect("env var TELEGRAM_BOT_TOKEN not set");
+        let token = env::var("TELEGRAM_BOT_TOKEN").expect("env var TELEGRAM_BOT_TOKEN not set");
 
         // Initiate the Telegram API client, and return
         Api::configure(token)
@@ -67,22 +62,27 @@ impl State {
     /// Because the stats of this message need to be tracked, it only allows to send requests that
     /// have a `Message` as response.
     /// This function uses a fixed timeout internally.
-    pub fn telegram_send<Req>(&self, request: Req)
-        -> Box<Future<Item = Option<Message>, Error = TelegramError>>
-        where
-            Req: Request<Response = JsonIdResponse<Message>>,
+    pub fn telegram_send<Req>(
+        &self,
+        request: Req,
+    ) -> Box<Future<Item = Option<Message>, Error = TelegramError>>
+    where
+        Req: Request<Response = JsonIdResponse<Message>>,
     {
         // Clone the state for use in this future
         let state = self.clone();
 
         // Send the message through the Telegram client, track the response for stats
-        let future = self.telegram_client()
+        let future = self
+            .telegram_client()
             .send_timeout(request, Duration::from_secs(10))
-            .inspect(move |msg| if let Some(msg) = msg {
-                if msg.edit_date.is_none() {
-                    state.stats().increase_stats(msg, 1, 0);
-                } else {
-                    state.stats().increase_stats(msg, 0, 1);
+            .inspect(move |msg| {
+                if let Some(msg) = msg {
+                    if msg.edit_date.is_none() {
+                        state.stats().increase_stats(msg, 1, 0);
+                    } else {
+                        state.stats().increase_stats(msg, 0, 1);
+                    }
                 }
             });
 
@@ -95,12 +95,12 @@ impl State {
     /// have a `Message` as response.
     /// This function uses a fixed timeout internally.
     pub fn telegram_spawn<Req>(&self, request: Req)
-        where
-            Req: Request<Response = JsonIdResponse<Message>>,
+    where
+        Req: Request<Response = JsonIdResponse<Message>>,
     {
-        self.inner.handle.spawn(
-            self.telegram_send(request).then(|_| Ok(())),
-        )
+        self.inner
+            .handle
+            .spawn(self.telegram_send(request).then(|_| Ok(())))
     }
 
     /// Get the stats manager.
@@ -137,11 +137,12 @@ impl StateInner {
     /// Create a MySQL connection to the database.
     fn create_database() -> MysqlConnection {
         // Retrieve the database connection URL
-        let database_url = env::var("DATABASE_URL")
-            .expect("env var DATABASE_URL not set");
+        let database_url = env::var("DATABASE_URL").expect("env var DATABASE_URL not set");
 
         // Connect to the database
-        MysqlConnection::establish(&database_url)
-            .expect(&format!("Failed to connect to database on {}", database_url))
+        MysqlConnection::establish(&database_url).expect(&format!(
+            "Failed to connect to database on {}",
+            database_url
+        ))
     }
 }

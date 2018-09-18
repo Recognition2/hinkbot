@@ -3,13 +3,10 @@ use std::sync::Mutex;
 
 use chrono::NaiveDateTime;
 use diesel::{
+    self,
     mysql::MysqlConnection,
     prelude::*,
-    result::{
-        Error as DieselError,
-        QueryResult,
-    },
-    self,
+    result::{Error as DieselError, QueryResult},
 };
 use telegram_bot::types::{ChatId, Message, MessageKind, UserId};
 
@@ -37,17 +34,13 @@ impl Stats {
     /// Increase the total message and edits count for the given user in the given chat.
     /// The update is pushed to the queue, to be pushed to the database periodically.
     /// If the given message kind is not a counted stat, nothing happends.
-    pub fn increase_stats(
-        &self,
-        message: &Message,
-        messages: u32,
-        edits: u32,
-    ) {
+    pub fn increase_stats(&self, message: &Message, messages: u32, edits: u32) {
         // Update the stats
         if let Some(message_type) = StatsKind::from_message(message) {
             match self.queue.lock() {
                 Ok(ref mut queue) => {
-                    let entry = queue.entry(message.chat.id())
+                    let entry = queue
+                        .entry(message.chat.id())
                         .or_insert(HashMap::new())
                         .entry(message.from.id)
                         .or_insert(HashMap::new())
@@ -55,7 +48,7 @@ impl Stats {
                         .or_insert((0, 0));
                     entry.0 += messages;
                     entry.1 += edits;
-                },
+                }
                 Err(_) => eprintln!("ERR: failed lock stats queue, unable to increase user stats"),
             }
         }
@@ -63,13 +56,12 @@ impl Stats {
         // Add the name of the user to the names queue
         match self.queue_names.lock() {
             Ok(ref mut names) => {
-                names.entry(message.from.id)
-                    .or_insert((
-                        message.from.username.to_owned(),
-                        message.from.first_name.clone(),
-                        message.from.last_name.to_owned(),
-                    ));
-            },
+                names.entry(message.from.id).or_insert((
+                    message.from.username.to_owned(),
+                    message.from.first_name.clone(),
+                    message.from.last_name.to_owned(),
+                ));
+            }
             Err(_) => eprintln!("ERR: failed lock stats queue, unable to increase user stats"),
         }
     }
@@ -87,8 +79,14 @@ impl Stats {
     pub fn flush(&self, connection: &MysqlConnection) {
         match (self.queue.lock(), self.queue_names.lock()) {
             (Ok(ref mut chats), Ok(ref mut names)) => Self::flush_chats(chats, names, connection),
-            (Err(err), _) => eprintln!("ERR: failed lock stats queue, unable to flush to database: {}", err),
-            (_, Err(err)) => eprintln!("ERR: failed lock stats names queue, unable to flush to database: {}", err),
+            (Err(err), _) => eprintln!(
+                "ERR: failed lock stats queue, unable to flush to database: {}",
+                err
+            ),
+            (_, Err(err)) => eprintln!(
+                "ERR: failed lock stats names queue, unable to flush to database: {}",
+                err
+            ),
         }
     }
 
@@ -103,25 +101,35 @@ impl Stats {
         // Flush each chat, remove the successfully flushed
         chats.retain(|chat, ref mut users| {
             // Find an existing entry in the database and update it, or create a new entry
-            match chat::dsl::chat.find(chat.to_i64()).first::<Chat>(connection) {
+            match chat::dsl::chat
+                .find(chat.to_i64())
+                .first::<Chat>(connection)
+            {
                 Ok(mut _existing) => {
                     // TODO: update if the title changed
                     // diesel::update(&existing)
                     //     .set((title.eq("title")))
                     //     .execute(connection);
-                },
-                Err(DieselError::NotFound) =>
+                }
+                Err(DieselError::NotFound) => {
                     if let Err(err) = diesel::insert_into(chat::dsl::chat)
                         .values(chat::dsl::telegram_id.eq(chat.to_i64()))
                         .execute(connection)
                     {
-                        eprintln!("ERR: failed to create queued chat in database, skipping: {}", err);
+                        eprintln!(
+                            "ERR: failed to create queued chat in database, skipping: {}",
+                            err
+                        );
                         return false;
-                    },
+                    }
+                }
                 Err(err) => {
-                    eprintln!("ERR: failed to check if queued chat exists in the database, skipping: {}", err);
+                    eprintln!(
+                        "ERR: failed to check if queued chat exists in the database, skipping: {}",
+                        err
+                    );
                     return false;
-                },
+                }
             }
 
             // Flush all users for this chat to the database
@@ -215,7 +223,8 @@ impl Stats {
     ) {
         // Flush all message types for the given user, remove successfully flushed
         stats.retain(|message_type, (messages, edits)| {
-            let result = Self::flush_user_stats(chat, user, *message_type, *messages, *edits, connection);
+            let result =
+                Self::flush_user_stats(chat, user, *message_type, *messages, *edits, connection);
             if let Err(ref err) = result {
                 eprintln!(
                     "ERR: failed to flush chat user stats to database, skipping: {}",
@@ -242,15 +251,14 @@ impl Stats {
             .find((chat.to_i64(), user.to_i64(), message_type.id()))
             .first::<ChatUserStats>(connection)
         {
-            Ok(existing) =>
-                diesel::update(&existing)
-                    .set((
-                        chat_user_stats::dsl::messages.eq(chat_user_stats::dsl::messages + messages as i32),
-                        chat_user_stats::dsl::edits.eq(chat_user_stats::dsl::edits + edits as i32),
-                    ))
-                    .execute(connection)
-                    .map(|_| ()),
-            Err(DieselError::NotFound) =>
+            Ok(existing) => diesel::update(&existing)
+                .set((
+                    chat_user_stats::dsl::messages
+                        .eq(chat_user_stats::dsl::messages + messages as i32),
+                    chat_user_stats::dsl::edits.eq(chat_user_stats::dsl::edits + edits as i32),
+                )).execute(connection)
+                .map(|_| ()),
+            Err(DieselError::NotFound) => {
                 diesel::insert_into(chat_user_stats::dsl::chat_user_stats)
                     .values((
                         chat_user_stats::dsl::chat_id.eq(chat.to_i64()),
@@ -258,9 +266,9 @@ impl Stats {
                         chat_user_stats::dsl::message_type.eq(message_type.id()),
                         chat_user_stats::dsl::messages.eq(messages as i32),
                         chat_user_stats::dsl::edits.eq(edits as i32),
-                    ))
-                    .execute(connection)
-                    .map(|_| ()),
+                    )).execute(connection)
+                    .map(|_| ())
+            }
             err => err.map(|_| ()),
         }
     }
@@ -273,26 +281,31 @@ impl Stats {
         selected_user: Option<UserId>,
     ) -> QueryResult<ChatStats> {
         use self::chat_user_stats::dsl::{
-            chat_id,
-            chat_user_stats,
-            created_at,
-            edits,
-            message_type,
-            messages,
-            user_id,
+            chat_id, chat_user_stats, created_at, edits, message_type, messages, user_id,
         };
-        use self::user::dsl::{username, first_name, last_name};
+        use self::user::dsl::{first_name, last_name, username};
 
         // Get all message stats associated with this chat
         // TODO: do a left join instead
-        let all_stats: Vec<(i64, Option<String>, String, Option<String>, i16, i32, i32)> = chat_user_stats
-            .inner_join(user::table)
-            .select((user_id, username, first_name, last_name, message_type, messages, edits))
-            .filter(chat_id.eq(selected_chat.to_i64()))
-            .load(connection)?;
+        let all_stats: Vec<(i64, Option<String>, String, Option<String>, i16, i32, i32)> =
+            chat_user_stats
+                .inner_join(user::table)
+                .select((
+                    user_id,
+                    username,
+                    first_name,
+                    last_name,
+                    message_type,
+                    messages,
+                    edits,
+                )).filter(chat_id.eq(selected_chat.to_i64()))
+                .load(connection)?;
 
         // Build a hashmap of user totals, add database and queue stats
-        let mut user_totals: HashMap<i64, (Option<String>, Option<String>, Option<String>, i32, i32)> = HashMap::new();
+        let mut user_totals: HashMap<
+            i64,
+            (Option<String>, Option<String>, Option<String>, i32, i32),
+        > = HashMap::new();
         for (user, user_username, first, last, _, num_messages, num_edits) in &all_stats {
             let entry = user_totals.entry(*user).or_insert((None, None, None, 0, 0));
             entry.0 = user_username.clone();
@@ -305,13 +318,16 @@ impl Stats {
             if let Some(chat_queue) = queue.get(&selected_chat) {
                 for (user, kind_stats) in chat_queue {
                     // Get the name from the name queue if available
-                    let name = self.queue_names
+                    let name = self
+                        .queue_names
                         .lock()
                         .ok()
                         .and_then(|names| names.get(user).cloned());
 
                     // Get the entry and update it
-                    let entry = user_totals.entry(user.to_i64()).or_insert((None, None, None, 0, 0));
+                    let entry = user_totals
+                        .entry(user.to_i64())
+                        .or_insert((None, None, None, 0, 0));
                     for (num_messages, num_edits) in kind_stats.values() {
                         if let Some((user_username, first, last)) = &name {
                             entry.0 = user_username.clone();
@@ -361,21 +377,24 @@ impl Stats {
         // Build a sorted list of user totals for easier reporting
         let mut user_totals: Vec<(String, i64, Option<String>, i32, i32)> = user_totals
             .into_iter()
-            .map(|(user, (user_username, first, _, num_messages, num_edits))| (
-                match first {
-                    Some(ref first) if !first.is_empty() => first.to_owned(),
-                    _ => if let Some(user_username) = &user_username {
-                            user_username.to_owned()
-                        } else {
-                            format!("{}", user)
+            .map(
+                |(user, (user_username, first, _, num_messages, num_edits))| {
+                    (
+                        match first {
+                            Some(ref first) if !first.is_empty() => first.to_owned(),
+                            _ => if let Some(user_username) = &user_username {
+                                user_username.to_owned()
+                            } else {
+                                format!("{}", user)
+                            },
                         },
+                        user,
+                        user_username,
+                        num_messages,
+                        num_edits,
+                    )
                 },
-                user,
-                user_username,
-                num_messages,
-                num_edits,
-            ))
-            .collect();
+            ).collect();
         user_totals.sort_unstable_by(|a, b| (b.3 + b.4).cmp(&(a.3 + a.4)));
 
         // Build a sorted list of user specifics for easier reporting
@@ -404,7 +423,13 @@ impl Stats {
             .ok();
 
         // Build the chat stats
-        Ok(ChatStats::new(user_totals, user_specifics, total_messages, total_edits, since))
+        Ok(ChatStats::new(
+            user_totals,
+            user_specifics,
+            total_messages,
+            total_edits,
+            since,
+        ))
     }
 }
 
@@ -508,26 +533,26 @@ impl StatsKind {
         // Determine the stats kind based on the message kind
         match &message.kind {
             MessageKind::Text { data, .. } => if data.trim_left().starts_with('/') {
-                    Some(StatsKind::Command)
-                } else {
-                    Some(StatsKind::Text)
-                },
+                Some(StatsKind::Command)
+            } else {
+                Some(StatsKind::Text)
+            },
             MessageKind::Audio { .. } => Some(StatsKind::Audio),
             MessageKind::Document { data, .. } => {
-                    // If the MIME type is a gif, it must be a GIF
-                    if data.mime_type == Some("image/gif".into()) {
-                        return Some(StatsKind::Gif);
-                    }
+                // If the MIME type is a gif, it must be a GIF
+                if data.mime_type == Some("image/gif".into()) {
+                    return Some(StatsKind::Gif);
+                }
 
-                    // If the mime type is MP4, and the filename is from Giphy, it may be a GIF
-                    if data.mime_type == Some("video/mp4".into())
-                        && data.file_name == Some("giphy.mp4".into())
-                    {
-                        return Some(StatsKind::Gif);
-                    }
+                // If the mime type is MP4, and the filename is from Giphy, it may be a GIF
+                if data.mime_type == Some("video/mp4".into())
+                    && data.file_name == Some("giphy.mp4".into())
+                {
+                    return Some(StatsKind::Gif);
+                }
 
-                    Some(StatsKind::Document)
-                },
+                Some(StatsKind::Document)
+            }
             MessageKind::Photo { .. } => Some(StatsKind::Photo),
             MessageKind::Sticker { .. } => Some(StatsKind::Sticker),
             MessageKind::Video { .. } => Some(StatsKind::Video),

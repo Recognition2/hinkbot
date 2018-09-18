@@ -1,19 +1,13 @@
-use failure::{
-    Error as FailureError,
-    SyncFailure,
-};
+use failure::{Error as FailureError, SyncFailure};
 use futures::Future;
 use telegram_bot::{
-    Error as TelegramError,
     prelude::*,
     types::{Message, ParseMode},
+    Error as TelegramError,
 };
 
+use super::{Action, ACTIONS};
 use state::State;
-use super::{
-    Action,
-    ACTIONS,
-};
 
 /// The action command name.
 const CMD: &'static str = "help";
@@ -45,21 +39,16 @@ impl Action for Help {
         HELP
     }
 
-    fn invoke(&self, state: &State, msg: &Message)
-        -> Box<Future<Item = (), Error = FailureError>>
-    {
+    fn invoke(&self, state: &State, msg: &Message) -> Box<Future<Item = (), Error = FailureError>> {
         // Build the command list
         let cmd_list = build_help_list();
 
         // Build a future for sending the response help message
-        let future = state.telegram_send(
-                msg.text_reply(format!(
-                        "*RISC commands:*\n{}",
-                        cmd_list,
-                    ))
+        let future = state
+            .telegram_send(
+                msg.text_reply(format!("*RISC commands:*\n{}", cmd_list,))
                     .parse_mode(ParseMode::Markdown),
-            )
-            .map(|_| ())
+            ).map(|_| ())
             .map_err(|err| Error::Respond(SyncFailure::new(err)))
             .from_err();
 
@@ -69,13 +58,10 @@ impl Action for Help {
 
 /// Build a string with a list of help commands.
 pub(crate) fn build_help_list() -> String {
-    let mut cmds: Vec<String> = ACTIONS.iter()
+    let mut cmds: Vec<String> = ACTIONS
+        .iter()
         .filter(|action| !action.hidden())
-        .map(|action| format!(
-            "/{}: _{}_",
-            action.cmd(),
-            action.help(),
-        ))
+        .map(|action| format!("/{}: _{}_", action.cmd(), action.help(),))
         .collect();
     cmds.sort();
     cmds.join("\n")

@@ -1,20 +1,13 @@
 use failure::SyncFailure;
-use futures::{
-    Future,
-    future::ok,
-};
+use futures::{future::ok, Future};
 use regex::Regex;
 use telegram_bot::{
-    Error as TelegramError,
     prelude::*,
     types::{Message, MessageChat, MessageKind, ParseMode},
+    Error as TelegramError,
 };
 
-use cmd::handler::{
-    Error as CmdHandlerError,
-    Handler as CmdHandler,
-    matches_cmd,
-};
+use cmd::handler::{matches_cmd, Error as CmdHandlerError, Handler as CmdHandler};
 use state::State;
 
 lazy_static! {
@@ -32,14 +25,9 @@ pub struct Handler;
 
 impl Handler {
     /// Handle the given message.
-    pub fn handle(state: &State, msg: Message)
-        -> Box<Future<Item = (), Error = Error>>
-    {
+    pub fn handle(state: &State, msg: Message) -> Box<Future<Item = (), Error = Error>> {
         match &msg.kind {
-            MessageKind::Text {
-                ref data,
-                ..
-            } => {
+            MessageKind::Text { ref data, .. } => {
                 // Log all incomming text messages
                 println!(
                     "MSG <{}>@{}: {}",
@@ -50,9 +38,7 @@ impl Handler {
 
                 // Route the message to the command handler, if it's a command
                 if let Some(cmd) = matches_cmd(data) {
-                    return Box::new(
-                        CmdHandler::handle(state, cmd, msg.clone()).from_err(),
-                    );
+                    return Box::new(CmdHandler::handle(state, cmd, msg.clone()).from_err());
                 }
 
                 // Handle Reddit messages
@@ -62,14 +48,11 @@ impl Handler {
 
                 // Route private messages
                 match &msg.chat {
-                    MessageChat::Private(..) =>
-                        return Box::new(
-                            Self::handle_private(state, &msg),
-                        ),
-                    _ => {},
+                    MessageChat::Private(..) => return Box::new(Self::handle_private(state, &msg)),
+                    _ => {}
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
 
         Box::new(ok(()))
@@ -77,18 +60,20 @@ impl Handler {
 
     /// Handle messages with Reddit references, such as messages containing `/r/rust`.
     /// If the given message does not contain any Reddit Reference, `None` is returned.
-    pub fn handle_reddit(state: &State, msg_text: &str, msg: &Message)
-        -> Option<impl Future<Item = (), Error = Error>>
-    {
+    pub fn handle_reddit(
+        state: &State,
+        msg_text: &str,
+        msg: &Message,
+    ) -> Option<impl Future<Item = (), Error = Error>> {
         // Collect all reddits from the message
         let mut reddits: Vec<String> = REDDIT_REGEX
             .captures_iter(msg_text)
-            .map(|r| r.name("r")
-                 .expect("failed to extract r from REDDIT_REGEX")
-                 .as_str()
-                 .to_owned()
-            )
-            .collect();
+            .map(|r| {
+                r.name("r")
+                    .expect("failed to extract r from REDDIT_REGEX")
+                    .as_str()
+                    .to_owned()
+            }).collect();
         reddits.sort_unstable();
         reddits.dedup();
 
@@ -98,35 +83,33 @@ impl Handler {
         }
 
         // Map the reddits into URLs
-        let reddits: Vec<String> = reddits.iter()
+        let reddits: Vec<String> = reddits
+            .iter()
             .map(|r| format!("[/r/{}](https://reddit.com/r/{})", r, r))
             .collect();
 
         // Send a response
         Some(
-            state.telegram_send(
+            state
+                .telegram_send(
                     msg.text_reply(reddits.join("\n"))
                         .parse_mode(ParseMode::Markdown)
                         .disable_notification(),
-                )
-                .map(|_| ())
-                .map_err(|err| Error::HandleReddit(SyncFailure::new(err)))
+                ).map(|_| ())
+                .map_err(|err| Error::HandleReddit(SyncFailure::new(err))),
         )
     }
 
     /// Handle the give private/direct message.
-    pub fn handle_private(state: &State, msg: &Message)
-        -> impl Future<Item = (), Error = Error>
-    {
+    pub fn handle_private(state: &State, msg: &Message) -> impl Future<Item = (), Error = Error> {
         // Send a message to the user
-        state.telegram_send(
+        state
+            .telegram_send(
                 msg.text_reply(format!(
-                        "`BLEEP BLOOP`\n`I AM A BOT`\n\n{}, direct messages are not supported yet.",
-                        msg.from.first_name,
-                    ))
-                    .parse_mode(ParseMode::Markdown),
-            )
-            .map(|_| ())
+                    "`BLEEP BLOOP`\n`I AM A BOT`\n\n{}, direct messages are not supported yet.",
+                    msg.from.first_name,
+                )).parse_mode(ParseMode::Markdown),
+            ).map(|_| ())
             .map_err(|err| Error::HandlePrivate(SyncFailure::new(err)))
     }
 }

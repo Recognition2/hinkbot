@@ -5,16 +5,13 @@ pub mod exec;
 pub mod help;
 pub mod id;
 pub mod ping;
-pub mod risc;
 pub mod retweet;
+pub mod risc;
 pub mod start;
 pub mod stats;
 pub mod test;
 
-use failure::{
-    Compat,
-    Error as FailureError,
-};
+use failure::{Compat, Error as FailureError};
 use futures::Future;
 use telegram_bot::types::Message;
 
@@ -60,8 +57,7 @@ pub trait Action {
     fn help(&self) -> &'static str;
 
     /// Invoke the action with the given context.
-    fn invoke(&self, state: &State, sg: &Message)
-        -> Box<Future<Item = (), Error = FailureError>>;
+    fn invoke(&self, state: &State, sg: &Message) -> Box<Future<Item = (), Error = FailureError>>;
 }
 
 /// An action error.
@@ -77,5 +73,5 @@ pub enum Error {
 
         /// The name of the action.
         name: String,
-    }
+    },
 }

@@ -1,19 +1,13 @@
-use failure::{
-    Error as FailureError,
-    SyncFailure,
-};
-use futures::{
-    Future,
-    future::ok,
-};
+use failure::{Error as FailureError, SyncFailure};
+use futures::{future::ok, Future};
 use telegram_bot::{
-    Error as TelegramError,
     prelude::*,
     types::{Message, MessageKind, ParseMode},
+    Error as TelegramError,
 };
 
-use state::State;
 use super::Action;
+use state::State;
 
 /// The action command name.
 const CMD: &'static str = "echo";
@@ -45,16 +39,12 @@ impl Action for Echo {
         HELP
     }
 
-    fn invoke(&self, state: &State, msg: &Message)
-        -> Box<Future<Item = (), Error = FailureError>>
-    {
-        if let MessageKind::Text {
-            ref data,
-            ..
-        } = &msg.kind {
+    fn invoke(&self, state: &State, msg: &Message) -> Box<Future<Item = (), Error = FailureError>> {
+        if let MessageKind::Text { ref data, .. } = &msg.kind {
             // Get the user's input
             // TODO: actually properly fetch the user input
-            let input = data.splitn(2, ' ')
+            let input = data
+                .splitn(2, ' ')
                 .skip(1)
                 .next()
                 .map(|cmd| cmd.trim_left())
@@ -62,10 +52,8 @@ impl Action for Echo {
                 .to_owned();
 
             // Build a future for sending the response message
-            let future = state.telegram_send(
-                    msg.text_reply(input)
-                        .parse_mode(ParseMode::Markdown),
-                )
+            let future = state
+                .telegram_send(msg.text_reply(input).parse_mode(ParseMode::Markdown))
                 .map(|_| ())
                 .map_err(|err| Error::Respond(SyncFailure::new(err)))
                 .from_err();

@@ -1,20 +1,14 @@
-use failure::{
-    Error as FailureError,
-    SyncFailure,
-};
-use futures::{
-    Future,
-    future::err,
-};
+use failure::{Error as FailureError, SyncFailure};
+use futures::{future::err, Future};
 use telegram_bot::{
-    Error as TelegramError,
     prelude::*,
     types::{Message, ParseMode},
+    Error as TelegramError,
 };
 
+use super::Action;
 use state::State;
 use stats::TelegramToI64;
-use super::Action;
 
 /// The action command name.
 const CMD: &'static str = "all";
@@ -46,26 +40,26 @@ impl Action for All {
         HELP
     }
 
-    fn invoke(&self, state: &State, msg: &Message)
-        -> Box<Future<Item = (), Error = FailureError>>
-    {
+    fn invoke(&self, state: &State, msg: &Message) -> Box<Future<Item = (), Error = FailureError>> {
         // Fetch the chat message stats
-        let stats = match state
-            .stats()
-            .fetch_chat_stats(state.db(), msg.chat.id(), Some(msg.from.id))
-        {
-            Ok(stats) => stats,
-            Err(e) => return Box::new(err(e.into())),
-        };
+        let stats =
+            match state
+                .stats()
+                .fetch_chat_stats(state.db(), msg.chat.id(), Some(msg.from.id))
+            {
+                Ok(stats) => stats,
+                Err(e) => return Box::new(err(e.into())),
+            };
 
         // Create a list of user mentions
+        // TODO: limit mentions to 100 users max?
         // TODO: do not mention the bot itself
-        let mentions = stats.users()
+        // TODO: do not mention users not in this group anymore
+        let mentions = stats
+            .users()
             .iter()
             .filter(|(_, user_id, _, _, _)| *user_id != msg.from.id.to_i64())
-            .map(|(_, user_id, _, _, _)|
-                format!("[@](tg://user?id={})", user_id)
-            )
+            .map(|(_, user_id, _, _, _)| format!("[@](tg://user?id={})", user_id))
             .collect::<Vec<String>>()
             .join(" ");
 
@@ -74,12 +68,9 @@ impl Action for All {
             .telegram_send(
                 msg.text_reply(format!(
                     "*Attention!* [{}](tg://user?id={}) mentions #all users.\n{}",
-                    msg.from.first_name,
-                    msg.from.id,
-                    mentions,
+                    msg.from.first_name, msg.from.id, mentions,
                 )).parse_mode(ParseMode::Markdown),
-            )
-            .map(|_| ())
+            ).map(|_| ())
             .map_err(|err| Error::Respond(SyncFailure::new(err)))
             .from_err();
 

@@ -1,16 +1,9 @@
-use failure::{
-    Error as FailureError,
-    SyncFailure,
-};
+use failure::{Error as FailureError, SyncFailure};
 use futures::Future;
-use telegram_bot::{
-    Error as TelegramError,
-    prelude::*,
-    types::Message,
-};
+use telegram_bot::{prelude::*, types::Message, Error as TelegramError};
 
-use state::State;
 use super::Action;
+use state::State;
 
 /// The action command name.
 const CMD: &'static str = "ping";
@@ -42,9 +35,7 @@ impl Action for Ping {
         HELP
     }
 
-    fn invoke(&self, state: &State, msg: &Message)
-        -> Box<Future<Item = (), Error = FailureError>>
-    {
+    fn invoke(&self, state: &State, msg: &Message) -> Box<Future<Item = (), Error = FailureError>> {
         // Build a message future for sending the response
         let future = state
             .telegram_send(msg.text_reply("Pong!"))

@@ -17,7 +17,6 @@ pub enum Error {
     // /// An error occurred while processing output from the invoked user command.
     // #[fail(display = "failed to process user command output")]
     // ProcessOutput(#[cause] IoError),
-
     /// An error occurred while waiting for the spawned user command complete.
     #[fail(display = "failed to wait for user command to complete")]
     Complete(#[cause] IoError),

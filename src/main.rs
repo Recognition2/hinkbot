@@ -28,17 +28,16 @@ use std::time::Duration;
 
 use dotenv::dotenv;
 use futures::{
-    Future,
     future::{ok, result},
-    Stream,
+    Future, Stream,
 };
+use telegram_bot::types::UpdateKind;
 use tokio_core::reactor::{Core, Handle, Interval};
 use tokio_signal::ctrl_c;
-use telegram_bot::types::UpdateKind;
 
 use msg::handler::Handler;
-use util::handle_msg_error;
 use state::State;
+use util::handle_msg_error;
 
 /// The application entrypoint.
 // TODO: propegate errors upto this function
@@ -76,21 +75,17 @@ fn main() {
 }
 
 /// Build the future for running the main application, which is the bot.
-fn build_application(state: State, handle: Handle)
-    -> impl Future<Item = (), Error = ()>
-{
+fn build_application(state: State, handle: Handle) -> impl Future<Item = (), Error = ()> {
     let stats_flusher = build_stats_flusher(state.clone(), handle.clone());
     let telegram = build_telegram_handler(state, handle);
 
-    telegram.join(stats_flusher)
-        .map(|_| ())
+    telegram.join(stats_flusher).map(|_| ())
 }
 
 /// Build a future for handling Telegram API updates.
-fn build_telegram_handler(state: State, handle: Handle)
-    -> impl Future<Item = (), Error = ()>
-{
-    state.telegram_client()
+fn build_telegram_handler(state: State, handle: Handle) -> impl Future<Item = (), Error = ()> {
+    state
+        .telegram_client()
         .stream()
         .for_each(move |update| {
             // Clone the state to get ownership
@@ -103,31 +98,27 @@ fn build_telegram_handler(state: State, handle: Handle)
                     state.stats().increase_message_stats(&message, 1, 0);
 
                     // Build the message handling future, handle any errors
-                    let msg_handler = Handler::handle(
-                            &state,
-                            message.clone(),
-                        )
-                        .or_else(|err| handle_msg_error(state, message, err)
-                            .or_else(|err| {
-                                eprintln!(
-                                    "ERR: failed to handle error while handling message: {:?}",
-                                    err,
-                                );
-                                ok(())
-                            })
-                        );
+                    let msg_handler = Handler::handle(&state, message.clone()).or_else(|err| {
+                        handle_msg_error(state, message, err).or_else(|err| {
+                            eprintln!(
+                                "ERR: failed to handle error while handling message: {:?}",
+                                err,
+                            );
+                            ok(())
+                        })
+                    });
 
                     // Spawn the message handler future on the reactor
                     handle.spawn(msg_handler);
-                },
-                UpdateKind::EditedMessage(message) =>
-                    state.stats().increase_message_stats(&message, 0, 1),
-                _ => {},
+                }
+                UpdateKind::EditedMessage(message) => {
+                    state.stats().increase_message_stats(&message, 0, 1)
+                }
+                _ => {}
             }
 
             ok(())
-        })
-        .map_err(|err| {
+        }).map_err(|err| {
             eprintln!("ERR: Telegram API updates loop error, ignoring: {}", err);
             ()
         })
@@ -136,14 +127,10 @@ fn build_telegram_handler(state: State, handle: Handle)
 /// Build a future for handling Telegram API updates.
 // TODO: make the interval time configurable
 fn build_stats_flusher(state: State, handle: Handle) -> impl Future<Item = (), Error = ()> {
-    Interval::new(
-            Duration::from_secs(60),
-            &handle,
-        )
+    Interval::new(Duration::from_secs(60), &handle)
         .expect("failed to build stats flushing interval future")
         .for_each(move |_| {
             state.stats().flush(state.db());
             Ok(())
-        })
-        .map_err(|_| ())
+        }).map_err(|_| ())
 }

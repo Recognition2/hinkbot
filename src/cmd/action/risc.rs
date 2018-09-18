@@ -1,17 +1,14 @@
-use failure::{
-    Error as FailureError,
-    SyncFailure,
-};
+use failure::{Error as FailureError, SyncFailure};
 use futures::Future;
 use telegram_bot::{
-    Error as TelegramError,
     prelude::*,
     types::{Message, ParseMode},
+    Error as TelegramError,
 };
 
+use super::Action;
 use app::{NAME, VERSION};
 use state::State;
-use super::Action;
 
 /// The action command name.
 const CMD: &'static str = "risc";
@@ -43,26 +40,23 @@ impl Action for Risc {
         HELP
     }
 
-    fn invoke(&self, state: &State, msg: &Message)
-        -> Box<Future<Item = (), Error = FailureError>>
-    {
+    fn invoke(&self, state: &State, msg: &Message) -> Box<Future<Item = (), Error = FailureError>> {
         // Build a future for sending the response message
-        let future = state.telegram_send(
+        let future = state
+            .telegram_send(
                 msg.text_reply(format!(
-                        "\
-                            `{} v{}`\n\
-                            \n\
-                            Developed by @timvisee\n\
-                            https://timvisee.com/\n\
-                            \n\
-                            Source:\n\
-                            https://gitlab.com/timvisee/risc-bot\
-                        ",
-                        NAME,
-                        VERSION,
-                    )).parse_mode(ParseMode::Markdown),
-            )
-            .map(|_| ())
+                    "\
+                     `{} v{}`\n\
+                     \n\
+                     Developed by @timvisee\n\
+                     https://timvisee.com/\n\
+                     \n\
+                     Source:\n\
+                     https://gitlab.com/timvisee/risc-bot\
+                     ",
+                    NAME, VERSION,
+                )).parse_mode(ParseMode::Markdown),
+            ).map(|_| ())
             .map_err(|err| Error::Respond(SyncFailure::new(err)))
             .from_err();
 

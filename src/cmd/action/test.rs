@@ -1,16 +1,13 @@
-use failure::{
-    Error as FailureError,
-    SyncFailure,
-};
+use failure::{Error as FailureError, SyncFailure};
 use futures::Future;
 use telegram_bot::{
-    Error as TelegramError,
     prelude::*,
     types::{Message, ParseMode},
+    Error as TelegramError,
 };
 
-use state::State;
 use super::Action;
+use state::State;
 
 /// The action command name.
 const CMD: &'static str = "test";
@@ -42,15 +39,13 @@ impl Action for Test {
         HELP
     }
 
-    fn invoke(&self, state: &State, msg: &Message)
-        -> Box<Future<Item = (), Error = FailureError>>
-    {
+    fn invoke(&self, state: &State, msg: &Message) -> Box<Future<Item = (), Error = FailureError>> {
         // Build a future for sending the response message
-        let future = state.telegram_send(
+        let future = state
+            .telegram_send(
                 msg.text_reply("<i>Jep... works on my machine!</i>")
                     .parse_mode(ParseMode::Html),
-            )
-            .map(|_| ())
+            ).map(|_| ())
             .map_err(|err| Error::Respond(SyncFailure::new(err)))
             .from_err();
 
