@@ -1,8 +1,6 @@
-# RISC bot [WIP]
-> A Telegram bot by Tim Visée for useful actions, written in Rust.
+# Special Timing Bot
+Telegram bot that warns you when a certain time has arrived
 
-[» Open in Telegram](https://t.me/riscbot)
+When initializing the bot, please copy the `settings.toml.default` to `settings.toml`.
 
-## License
-This project is released under the GNU GPL-3.0 license.
-Check out the [LICENSE](LICENSE) file for more information. 
+This bot will remind you ever day at the times you want.

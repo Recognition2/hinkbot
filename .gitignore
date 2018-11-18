@@ -4,3 +4,6 @@
 
 # Vim files
 .*.sw[pom]
+settings.toml
+hinkbot
+.idea/
