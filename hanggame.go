@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const dict string = "/usr/share/dict/words"
+//const dict string = "/home/gregory/dict_nl.txt"
 
 const (
 	Active HangGameStatus = iota
@@ -15,12 +15,18 @@ const (
 	Lost
 )
 
+type Guess struct {
+	Author  int
+	Char    rune
+	Correct bool
+}
+
 type HangGameStatus int8
 type HangGame struct {
-	status       HangGameStatus // Is a game currently being played?
-	guessedChars []rune         // What letters have been tried yet
-	livesLeft    int
-	secretWord   string // This HangGame, we try to guess this word
+	Status     HangGameStatus // Is a game currently being played?
+	Guesses    []Guess
+	LivesLeft  int
+	SecretWord string // This HangGame, we try to guess this word
 }
 
 func getRandomWordFromDict(s string) string {
@@ -37,15 +43,12 @@ func getRandomWordFromDict(s string) string {
 		}
 		newWordList = append(newWordList, w)
 	}
-	return newWordList[rand.Int31n(int32(len(newWordList)))]
+	return strings.ToUpper(newWordList[rand.Int31n(int32(len(newWordList)-1))])
 }
 
 func NewHangGame() HangGame {
-	// First get a new word
-	randomWord := getRandomWordFromDict(dict)
-
-	return HangGame{status: Active,
-		livesLeft:    10,
-		secretWord:   randomWord,
-		guessedChars: make([]rune, 0, 26)}
+	return HangGame{Status: Active,
+		LivesLeft:  10,
+		SecretWord: getRandomWordFromDict(g.c.Dict),
+		Guesses:    make([]Guess, 0, 26)}
 }

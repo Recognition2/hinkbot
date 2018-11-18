@@ -17,6 +17,7 @@ type global struct {
 type config struct {
 	Apikey string  // Telegram API key
 	Admins []int64 // Bot admins
+	Dict string // What to use as dictionary file
 }
 
 type chatID = int64

@@ -1,10 +1,11 @@
 package main
 
 import (
-	"encoding/gob"
+	"encoding/json"
 	"github.com/BurntSushi/toml"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
 	"sync"
@@ -18,7 +19,7 @@ var (
 	logInfo = log.New(os.Stdout, "[INFO] ", log.Ldate+log.Ltime)
 	g       = global{shutdown: make(chan bool),
 		games: make(map[chatID][]HangGame)}
-	sendchannel = make(chan tgbotapi.MessageConfig, 128)
+	sendMessageChan = make(chan tgbotapi.MessageConfig, 128)
 )
 
 func main() {
@@ -32,6 +33,9 @@ func main() {
 		logErr.Println(err)
 		return
 	}
+
+	// Seed the RNG
+	rand.Seed(time.Now().UnixNano())
 
 	// Create new bot
 	g.bot, err = tgbotapi.NewBotAPI(g.c.Apikey)
@@ -49,27 +53,24 @@ func main() {
 	var gamesLock sync.RWMutex
 	g.gamesLock = &gamesLock
 
-	//// Fill subscriptions object
-	//err = Load("data.gob", &g.games)
-	//if err != nil {
-	//	logErr.Println(err)
-	//}
+	// Fill subscriptions object
+	err = Load("data.gob", &g.games)
+	if err != nil {
+		logErr.Println(err)
+	}
 
 	// All messages are received by the messageHandler
 	wg.Add(1)
 	go messageHandler()
-	for i := 0; i < 3; i++ {
+
+	for i := 0; i < 3; i++ { // Start 3 async message senders
 		wg.Add(1)
 		go messageSender(i)
 	}
 
-	//wg.Add(1)
-	//go specialTimeWatcher()
-	//
-	//wg.Add(1)
-	//go dataSaver()
+	wg.Add(1)
+	go dataSaver()
 
-	//
 	// Perform other startup tasks
 
 	sigs := make(chan os.Signal, 2)
@@ -83,6 +84,8 @@ func main() {
 	///////////////
 
 	// Program will hang here
+	// On this select statement
+
 	select {
 	case <-sigs:
 		close(g.shutdown)
@@ -99,7 +102,7 @@ func main() {
 func Save(path string, object interface{}) error {
 	file, err := os.Create(path)
 	if err == nil {
-		encoder := gob.NewEncoder(file)
+		encoder := json.NewEncoder(file)
 		encoder.Encode(object)
 	}
 	file.Close()
@@ -108,7 +111,7 @@ func Save(path string, object interface{}) error {
 func Load(path string, o interface{}) error {
 	file, err := os.Open(path)
 	if err == nil {
-		dec := gob.NewDecoder(file)
+		dec := json.NewDecoder(file)
 		err = dec.Decode(o)
 	}
 	file.Close()
